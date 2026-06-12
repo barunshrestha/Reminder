@@ -1,0 +1,20 @@
+{
+  "name": "@payment-reminder/reminders",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@payment-reminder/domain": "*",
+    "@payment-reminder/email-templates": "*",
+    "@prisma/client": "^6.9.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

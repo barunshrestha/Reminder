@@ -1,0 +1,87 @@
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { InvoiceStatus, Prisma } from "@prisma/client";
+import { AuditService } from "../audit/audit.service";
+import { PrismaService } from "../prisma/prisma.service";
+import type { PatchVendorInvoiceDto } from "./dto/patch-invoice.dto";
+
+@Injectable()
+export class InvoicesService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
+
+  findAll(params?: { status?: string; send_reminder?: string }) {
+    const where: Prisma.InvoiceWhereInput = {};
+    if (params?.status && isInvoiceStatus(params.status)) {
+      where.status = params.status;
+    }
+    if (params?.send_reminder === "true") {
+      where.sendReminder = true;
+    }
+    if (params?.send_reminder === "false") {
+      where.sendReminder = false;
+    }
+    return this.prisma.invoice.findMany({
+      where,
+      orderBy: { dueDate: "asc" },
+      take: 500,
+    });
+  }
+
+  async findOne(invoiceNumber: string) {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { invoiceNumber },
+      include: {
+        notificationDocuments: { orderBy: { generatedAt: "desc" }, take: 10 },
+        tierNotifications: { orderBy: { tier: "asc" } },
+      },
+    });
+    if (!invoice) {
+      throw new NotFoundException("Invoice not found");
+    }
+    return invoice;
+  }
+
+  async patch(invoiceNumber: string, dto: PatchVendorInvoiceDto) {
+    await this.findOne(invoiceNumber);
+    const data: Prisma.InvoiceUpdateInput = {};
+    if (dto.send_reminder !== undefined) {
+      data.sendReminder = dto.send_reminder;
+    }
+    if (dto.email_opt_out !== undefined) {
+      data.emailOptOut = dto.email_opt_out;
+    }
+    if (dto.consent_email !== undefined) {
+      data.consentEmail = dto.consent_email;
+    }
+    if (dto.client_email !== undefined) {
+      data.clientEmail = dto.client_email;
+    }
+    if (dto.reminder_delivery_mode !== undefined) {
+      data.reminderDeliveryMode = dto.reminder_delivery_mode;
+    }
+    if (dto.status !== undefined) {
+      data.status = dto.status;
+      if (dto.status === "paid" || dto.status === "closed") {
+        data.paidAt = new Date();
+      }
+    }
+
+    const updated = await this.prisma.invoice.update({
+      where: { invoiceNumber },
+      data,
+    });
+
+    await this.audit.record("invoice.updated", {
+      invoice_number: invoiceNumber,
+      fields: Object.keys(dto),
+    });
+
+    return updated;
+  }
+}
+
+function isInvoiceStatus(value: string): value is InvoiceStatus {
+  return value === "open" || value === "paid" || value === "closed";
+}

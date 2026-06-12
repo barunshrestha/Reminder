@@ -1,0 +1,59 @@
+openapi: 3.1.0
+info:
+  title: Payment Reminder Integration API
+  version: 1.0.0
+servers:
+  - url: /api/v1/integration
+paths:
+  /health:
+    get:
+      summary: Connector health
+      security:
+        - ApiKey: []
+      responses:
+        '200':
+          description: OK
+  /invoices/bulk:
+    post:
+      summary: Bulk upsert invoices
+      security:
+        - ApiKey: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                invoices:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        '200':
+          description: Upsert result
+  /invoices/{invoiceNumber}:
+    patch:
+      summary: Partial invoice update
+      security:
+        - ApiKey: []
+      parameters:
+        - name: invoiceNumber
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Updated
+components:
+  securitySchemes:
+    ApiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key

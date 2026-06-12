@@ -1,0 +1,124 @@
+openapi: 3.1.0
+info:
+  title: Payment Reminder Integration API
+  version: 0.1.0
+  description: API key authenticated routes for ERP/connectors (vendor deployment).
+servers:
+  - url: http://localhost:3000/api/v1
+paths:
+  /integration/health:
+    get:
+      summary: Connector health
+      security:
+        - ApiKeyAuth: []
+      responses:
+        "200":
+          description: OK
+  /integration/invoices/bulk:
+    post:
+      summary: Bulk upsert invoices with delta sync
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [invoices]
+              properties:
+                complete_sync:
+                  type: boolean
+                  description: When true, invoices not in payload increment missed_sync_count
+                invoices:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/IntegrationInvoice"
+      responses:
+        "200":
+          description: Upsert summary
+  /integration/invoices/{invoiceNumber}:
+    patch:
+      summary: Partial invoice update
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: path
+          name: invoiceNumber
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IntegrationInvoicePatch"
+      responses:
+        "200":
+          description: Updated
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+  schemas:
+    IntegrationInvoice:
+      type: object
+      required:
+        - client_name
+        - invoice_number
+        - total_amount
+        - balance_due
+        - due_date
+      properties:
+        client_name:
+          type: string
+        invoice_number:
+          type: string
+        total_amount:
+          type: string
+        balance_due:
+          type: string
+        due_date:
+          type: string
+          format: date
+        client_email:
+          type: string
+        external_client_id:
+          type: string
+        send_reminder:
+          type: boolean
+        email_opt_out:
+          type: boolean
+        consent_email:
+          type: boolean
+        reminder_delivery_mode:
+          type: string
+          enum: [email, document_only]
+        status:
+          type: string
+          enum: [open, paid, closed]
+    IntegrationInvoicePatch:
+      type: object
+      properties:
+        client_name:
+          type: string
+        balance_due:
+          type: string
+        send_reminder:
+          type: boolean
+        email_opt_out:
+          type: boolean
+        status:
+          type: string
+          enum: [open, paid, closed]

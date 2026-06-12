@@ -1,0 +1,21 @@
+{
+  "name": "@payment-reminder/worker",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "start:dev": "tsx watch src/main.ts"
+  },
+  "dependencies": {
+    "@payment-reminder/domain": "*",
+    "@payment-reminder/reminders": "*",
+    "@prisma/client": "^6.9.0",
+    "bullmq": "^5.53.2",
+    "dotenv": "^16.6.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.32",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  }
+}

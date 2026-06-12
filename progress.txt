@@ -1,0 +1,68 @@
+Payment Reminder Platform — Implementation Progress
+Last updated: 2026-06-05
+
+=== Phases 1–4: COMPLETE ===
+See git history / prior sections (foundation, API, schedules, integration).
+
+=== Phase 5 (M4–M5): COMPLETE ===
+[x] 5.1 Vendor digest email (non-blocking, all users when digest_email_enabled)
+[x] 5.2 DB connectors: CRUD + read-only SQL sync + complete_sync finalize
+[x] 5.3 Schedule run hooks: sync enabled connectors before evaluate (API path)
+[x] 5.4 Vendor settings API (GET/PATCH)
+[x] 5.5 Documents: PDF download + HTML preview
+[x] 5.6 Audit log API (GET /audit-events)
+[x] 5.7 apps/web Next.js dashboard (login, metrics, invoices, schedules, import, connectors, settings, audit)
+[x] 5.8 CORS for web origin; runbook local dev + deploy steps
+[x] 5.9 Seed: mapping profile, demo connector, vendor name/address
+
+=== M1 Excel Import (enhancement): COMPLETE ===
+[x] SpreadsheetUpload + SpreadsheetUploadInvoice schema; local file storage under STORAGE_ROOT/uploads
+[x] GET /import/template (?format=xlsx|csv), GET /import/uploads, DELETE /import/uploads/:id (?mode=)
+[x] POST /import/preview, POST /import/spreadsheet (409 + override), POST /import/spreadsheet/batch
+[x] Web Import page: Excel/CSV templates, drag-and-drop queue, override modal, header mapper, upload history
+[x] Delete upload dialog: Delete file and data | Delete file only | Cancel
+[x] Unit tests: parser, preview, template (xlsx/csv), upload replace/delete modes, row mapper, conflict 409
+
+=== M1 Import follow-ups (2026-06-05): COMPLETE ===
+[x] CSV template download (ING-11): format=csv on template endpoint + second UI button
+[x] Fix template download returning JSON-serialized Buffer (use StreamableFile → valid .xlsx/.csv)
+[x] Parse Excel currency in import ($5,250.00) — avoids 500 on Decimal parse
+[x] Import UX: extra columns ignored (no blocked queue); validation errors listed after upload
+[x] Header BOM/trim; rows without email import as document_only
+
+Import behavior:
+  - Unique invoice_number → insert; existing → update or skip if unchanged
+
+=== M1 Invoice scan (2026-06-12): IN PROGRESS ===
+[x] Prisma: invoice_scan_uploads + junction; default_payment_terms_days on vendor_settings
+[x] API: POST extract/batch, confirm/batch, GET history, GET :id/image
+[x] OpenAI vision extraction (OPENAI_API_KEY); Net-30 due date fallback
+[x] Web: /import/scan tab — camera/upload, per-image review, confirm import
+[ ] Scan delete/history parity with spreadsheet uploads
+[ ] Vendor settings UI for default_payment_terms_days
+  - Same filename → 409 unless override=true (replace file + reconcile invoices)
+  - Delete file and data → remove upload + invoices only from that file (when safe)
+  - Delete file only → remove upload record; keep invoice rows
+
+Test commands:
+  npm test  → domain 24, email-templates 2, reminders 3, api 21+ (import suite)
+
+Run full stack:
+  npm run db:push && npm run db:seed
+  npm run dev:api    # :3000
+  npm run dev:web    # :3001  → http://localhost:3001/import
+
+Default logins:
+  Web: admin@example.com / ChangeMeNow123!
+  Integration: X-API-Key: pr_dev_integration_key_only_for_local
+
+Dev tip: if web shows "Cannot find module './NNN.js'", rm -rf apps/web/.next && npm run dev:web
+
+=== Optional / future ===
+- Worker-side connector sync hook (shared package)
+- Schedule run document ZIP download
+- SSO, production email provider adapter
+- prisma migrate (forward migrations) for production
+- Error CSV download (PRD ING-05)
+
+See docs/product/PRD.md milestones; plan: .cursor/plans/m1_excel_import_ux_7da8619d.plan.md

@@ -1,0 +1,36 @@
+{
+  "name": "payment-reminder",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "test": "npm run test -w @payment-reminder/domain && npm run test -w @payment-reminder/email-templates && npm run test -w @payment-reminder/reminders && npm run test -w @payment-reminder/api",
+    "test:email-templates": "npm run test -w @payment-reminder/email-templates",
+    "test:reminders": "npm run test -w @payment-reminder/reminders",
+    "test:domain": "npm run test -w @payment-reminder/domain",
+    "test:api": "npm run test -w @payment-reminder/api",
+    "build:domain": "npm run build -w @payment-reminder/domain",
+    "build:email-templates": "npm run build -w @payment-reminder/email-templates",
+    "build:reminders": "npm run build -w @payment-reminder/reminders",
+    "build:api": "npm run build -w @payment-reminder/domain && npm run build -w @payment-reminder/email-templates && npm run build -w @payment-reminder/reminders && npm run build -w @payment-reminder/api",
+    "dev:api": "npm run start:dev -w @payment-reminder/api",
+    "dev:web": "npm run dev -w @payment-reminder/web",
+    "dev:worker": "npm run start:dev -w @payment-reminder/worker",
+    "db:generate": "prisma generate",
+    "db:push": "npm run setup:env && prisma db push",
+    "db:seed": "npm run setup:env && tsx prisma/seed.ts",
+    "setup:env": "test -f .env || cp .env.example .env"
+  },
+  "devDependencies": {
+    "dotenv": "^16.6.1",
+    "prisma": "^6.9.0",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.9.0",
+    "argon2": "^0.43.0"
+  }
+}

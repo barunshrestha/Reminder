@@ -6,6 +6,7 @@ import {
 import {
   renderReminderDocumentHtml,
   renderReminderEmail,
+  type MilestoneTemplateContent,
   type ReminderTemplateData,
 } from "@payment-reminder/email-templates";
 import type { PrismaClient } from "@prisma/client";
@@ -97,6 +98,16 @@ export class ReminderRunExecutor {
         await ensureStorageRoot(storageRoot);
       }
 
+      const templateRows = await this.prisma.reminderMilestoneTemplate.findMany({
+        where: { isCustom: true },
+      });
+      const templateMap = new Map<number, MilestoneTemplateContent>(
+        templateRows.map((row) => [
+          row.tierDays,
+          { subject: row.subject, bodyHtml: row.bodyHtml },
+        ]),
+      );
+
       const invoices = await this.prisma.invoice.findMany({
         where: { sendReminder: true, isActive: true, status: "open" },
       });
@@ -180,9 +191,12 @@ export class ReminderRunExecutor {
           notificationNumber: invoice.notificationNumber,
           comments: invoice.comments,
           includeComments: vendor.includeCommentsInEmail,
+          vendorName: vendor.vendorName ?? undefined,
           vendorPhysicalAddress: vendor.vendorPhysicalAddress,
           unsubscribeUrl: `https://localhost/api/v1/unsubscribe?invoice=${invoice.invoiceNumber}`,
         };
+
+        const templateOverride = templateMap.get(nextTier);
 
         try {
           if (invoice.reminderDeliveryMode === "email") {
@@ -192,6 +206,7 @@ export class ReminderRunExecutor {
               nextTier,
               templateData,
               run.id,
+              templateOverride,
             );
             stats.emailsSent++;
           } else {
@@ -201,6 +216,7 @@ export class ReminderRunExecutor {
               templateData,
               run.id,
               storageRoot,
+              templateOverride,
             );
             stats.documentsGenerated++;
           }
@@ -300,8 +316,13 @@ export class ReminderRunExecutor {
     tier: number,
     data: ReminderTemplateData,
     runId: string,
+    templateOverride?: MilestoneTemplateContent,
   ): Promise<void> {
-    const { subject, html, text, templateId } = renderReminderEmail(tier, data);
+    const { subject, html, text, templateId } = renderReminderEmail(
+      tier,
+      data,
+      templateOverride,
+    );
     const result = await this.emailSender.send({
       to,
       subject,
@@ -329,8 +350,13 @@ export class ReminderRunExecutor {
     data: ReminderTemplateData,
     runId: string,
     storageRoot: string,
+    templateOverride?: MilestoneTemplateContent,
   ): Promise<void> {
-    const { html, templateId } = renderReminderDocumentHtml(tier, data);
+    const { html, templateId } = renderReminderDocumentHtml(
+      tier,
+      data,
+      templateOverride,
+    );
     const doc = await generateNotificationDocument({
       invoiceId,
       tier,

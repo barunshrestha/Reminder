@@ -94,6 +94,27 @@ The **Import** page (`/import`) supports Excel and CSV template download (Defaul
 | GET | `/api/v1/import/scan/history` | scan upload history |
 | GET | `/api/v1/import/scan/:id/image` | stored scan image |
 
+### Reminder config (Option C scheduling)
+
+| Method | Path | Auth |
+|--------|------|------|
+| GET | `/api/v1/reminder-config` | required |
+| PATCH | `/api/v1/reminder-config` | admin |
+
+Configure overdue tiers, email templates, and processing cadence in **Settings**; use **Schedules** for run history and manual triggers.
+
+### Reminder templates (per-milestone email/document copy)
+
+| Method | Path | Auth |
+|--------|------|------|
+| GET | `/api/v1/reminder-templates` | required |
+| GET | `/api/v1/reminder-templates/:tierDays` | required |
+| PATCH | `/api/v1/reminder-templates/:tierDays` | admin |
+| POST | `/api/v1/reminder-templates/:tierDays/reset` | admin |
+| POST | `/api/v1/reminder-templates/preview` | required |
+
+Customize subject and message body per overdue milestone in **Settings → Email templates**. Same copy is used for email and `document_only` PDF/HTML reminders.
+
 ## Progress
 
 See [progress.txt](progress.txt).

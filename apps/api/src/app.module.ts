@@ -13,6 +13,8 @@ import { MappingProfilesModule } from "./mapping-profiles/mapping-profiles.modul
 import { MetricsModule } from "./metrics/metrics.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { PublicModule } from "./public/public.module";
+import { ReminderConfigModule } from "./reminder-config/reminder-config.module";
+import { ReminderTemplatesModule } from "./reminder-templates/reminder-templates.module";
 import { SchedulesModule } from "./schedules/schedules.module";
 import { VendorSettingsModule } from "./vendor-settings/vendor-settings.module";
 
@@ -31,6 +33,8 @@ import { VendorSettingsModule } from "./vendor-settings/vendor-settings.module";
     ApiKeysModule,
     MetricsModule,
     PublicModule,
+    ReminderConfigModule,
+    ReminderTemplatesModule,
     DocsModule,
     DocumentsModule,
     VendorSettingsModule,

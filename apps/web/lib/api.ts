@@ -346,3 +346,92 @@ export async function confirmInvoiceScanBatch(items: ConfirmScanInvoiceInput[]) 
 export async function listInvoiceScanUploads() {
   return api<InvoiceScanUploadItem[]>("/import/scan/history");
 }
+
+export type ReminderConfig = {
+  overdueTiers: number[];
+  tierPreset: "standard" | "gentle" | "custom";
+  remindersEnabled: boolean;
+  processingPreset: "daily" | "weekly" | "manual";
+  weeklyDay: number;
+  runHour: number;
+  timezone: string;
+  syncBeforeCheck: boolean;
+  scheduleId: string;
+  nextRunDescription: string;
+};
+
+export type ScheduleRun = {
+  id: string;
+  status: string;
+  dryRun: boolean;
+  stats: Record<string, unknown> | null;
+  startedAt: string;
+  endedAt: string | null;
+};
+
+export async function getReminderConfig() {
+  return api<ReminderConfig>("/reminder-config");
+}
+
+export async function updateReminderConfig(data: Partial<ReminderConfig>) {
+  return api<ReminderConfig>("/reminder-config", {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function listScheduleRuns(scheduleId: string) {
+  return api<ScheduleRun[]>(`/schedules/${scheduleId}/runs`);
+}
+
+export type ReminderTemplateItem = {
+  tierDays: number;
+  subject: string;
+  bodyHtml: string;
+  isCustom: boolean;
+  isDefault: boolean;
+};
+
+export type ReminderTemplatesResponse = {
+  templates: ReminderTemplateItem[];
+  mergeFields: string[];
+};
+
+export type ReminderTemplatePreview = {
+  subject: string;
+  html: string;
+  text: string;
+  documentHtml: string;
+};
+
+export async function getReminderTemplates() {
+  return api<ReminderTemplatesResponse>("/reminder-templates");
+}
+
+export async function updateReminderTemplate(
+  tierDays: number,
+  data: { subject: string; bodyHtml: string },
+) {
+  return api<ReminderTemplateItem>(`/reminder-templates/${tierDays}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function resetReminderTemplate(tierDays: number) {
+  return api<ReminderTemplateItem>(`/reminder-templates/${tierDays}/reset`, {
+    method: "POST",
+  });
+}
+
+export async function previewReminderTemplate(data: {
+  tierDays: number;
+  subject: string;
+  bodyHtml: string;
+  invoiceNumber?: string;
+}) {
+  return api<ReminderTemplatePreview>("/reminder-templates/preview", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}

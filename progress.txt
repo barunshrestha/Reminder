@@ -1,5 +1,5 @@
 Payment Reminder Platform — Implementation Progress
-Last updated: 2026-06-05
+Last updated: 2026-06-12
 
 === Phases 1–4: COMPLETE ===
 See git history / prior sections (foundation, API, schedules, integration).
@@ -33,13 +33,31 @@ See git history / prior sections (foundation, API, schedules, integration).
 Import behavior:
   - Unique invoice_number → insert; existing → update or skip if unchanged
 
-=== M1 Invoice scan (2026-06-12): IN PROGRESS ===
+=== M1 Invoice scan (2026-06-12): COMPLETE ===
 [x] Prisma: invoice_scan_uploads + junction; default_payment_terms_days on vendor_settings
 [x] API: POST extract/batch, confirm/batch, GET history, GET :id/image
 [x] OpenAI vision extraction (OPENAI_API_KEY); Net-30 due date fallback
 [x] Web: /import/scan tab — camera/upload, per-image review, confirm import
+
+=== Option C reminder scheduling (2026-06-12): COMPLETE ===
+[x] Domain: processing-schedule presets + cron mapper + tier presets
+[x] API: GET/PATCH /reminder-config syncs vendor_settings + canonical schedule
+[x] Prisma: reminders_enabled, processing_preset, processing_run_hour, processing_weekly_day
+[x] Web Settings: Reminder rules + Processing schedule cards
+[x] Web Schedules: ops view with summary, run history, dry-run/live trigger
+[x] Seed: default daily 8am schedule, dryRun=false
+
+=== Milestone email templates (2026-06-12): COMPLETE ===
+[x] email-templates: getDefaultMilestoneTemplate, applyMergeFields, render override param
+[x] Prisma: reminder_milestone_templates (tier_days PK, subject, body_html, is_custom)
+[x] API: GET/PATCH/reset /reminder-templates, POST preview
+[x] ReminderRunExecutor loads custom templates + vendorName at run start
+[x] Web Settings: Email templates card (milestone select, subject/body, merge chips, preview, save/reset)
+[x] PRD v1.7: TMP-01–06, UI-11
+
 [ ] Scan delete/history parity with spreadsheet uploads
-[ ] Vendor settings UI for default_payment_terms_days
+[ ] Vendor settings UI for default_payment_terms_days (field exists; no dedicated UI)
+[ ] SMS delivery mode + sender (designed per-invoice; not implemented)
   - Same filename → 409 unless override=true (replace file + reconcile invoices)
   - Delete file and data → remove upload + invoices only from that file (when safe)
   - Delete file only → remove upload record; keep invoice rows

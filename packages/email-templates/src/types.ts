@@ -13,4 +13,24 @@ export interface ReminderTemplateData {
   vendorPhysicalAddress?: string | null;
   includeComments?: boolean;
   unsubscribeUrl?: string;
+  tier?: number;
 }
+
+export interface MilestoneTemplateContent {
+  subject: string;
+  bodyHtml: string;
+}
+
+export type MergeFieldContext = ReminderTemplateData & { tier: number };
+
+export const MERGE_FIELDS = [
+  "client_name",
+  "invoice_number",
+  "balance_due",
+  "total_amount",
+  "due_date",
+  "days_behind",
+  "tier",
+  "vendor_name",
+  "date_of_service",
+] as const;

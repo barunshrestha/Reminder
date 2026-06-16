@@ -82,11 +82,12 @@ async function main() {
     where: { id: "00000000-0000-4000-8000-000000000001" },
     create: {
       id: "00000000-0000-4000-8000-000000000001",
-      name: "Weekly overdue check",
-      cronExpression: "0 9 * * 1",
+      name: "Default reminder processing",
+      cronExpression: "0 8 * * *",
       timezone: "America/New_York",
       enabled: true,
-      dryRun: true,
+      dryRun: false,
+      runSyncBeforeEvaluate: false,
     },
     update: {},
   });

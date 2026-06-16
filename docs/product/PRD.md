@@ -4,7 +4,7 @@
 
 | Field | Value |
 |-------|-------|
-| **Version** | 1.5 |
+| **Version** | 1.7 |
 | **Status** | Approved for implementation |
 | **Last updated** | 2026-06-12 |
 | **Related docs** | [Engineering Standards](../engineering/standards.md) · [Agent Skills](../agents/skills.md) · [Reminder Agent](../agents/agent.md) |
@@ -209,6 +209,10 @@ Extraction uses an external vision API (OpenAI, configurable via `OPENAI_API_KEY
 | `vendor_physical_address` | — | CAN-SPAM footer (required for production) |
 | `digest_email_enabled` | `false` | Send non-blocking run summary to vendor users |
 | `default_payment_terms_days` | `30` | When a scanned invoice has no explicit `due_date`, compute `due_date = invoice_date + N days`. Vendor may override on the review screen. |
+| `reminders_enabled` | `true` | Master toggle for automatic reminder processing |
+| `processing_preset` | `daily` | Vendor-facing cadence: `daily`, `weekly`, or `manual` |
+| `processing_run_hour` | `8` | Hour (0–23) when daily/weekly check runs |
+| `processing_weekly_day` | `1` | Day of week (0=Sun … 6=Sat) for weekly preset |
 
 ### 7.3 Schedule entity
 
@@ -250,16 +254,31 @@ Extraction uses an external vision API (OpenAI, configurable via `OPENAI_API_KEY
 
 ### 8.2 Template matrix
 
-| Tier (days) | Template ID | Tone (guideline) |
-|-------------|-------------|------------------|
+Vendors customize **subject** and **message body** per overdue milestone in Settings. The same copy applies to **email** and **document_only** delivery. System wraps vendor text with greeting (`Dear {{client_name}}`), invoice detail list, optional comments block, and CAN-SPAM footer (not editable in v1).
+
+| Tier (days) | Template ID | Default tone |
+|-------------|-------------|--------------|
 | 15 | `reminder_tier_15` | Friendly first notice |
 | 30 | `reminder_tier_30` | Firm follow-up |
 | 45 | `reminder_tier_45` | Urgent |
 | 60 | `reminder_tier_60` | Final notice |
 
-Additional tiers use `reminder_tier_{n}` when `overdue_tiers` is customized.
+Additional tiers use `reminder_tier_{n}` when `overdue_tiers` is customized. Missing custom row → system default from `@payment-reminder/email-templates`.
 
-Merge fields: `client_name`, `invoice_number`, `total_amount`, `balance_due`, `due_date`, `date_of_service`, `services`, `days_behind`, `notification_number`, `comments` (optional), vendor name.
+**Default subject:** `Payment reminder — invoice {{invoice_number}} ({{days_behind}} days past due)`
+
+**Default body (vendor-editable portion):** headline `{{days_behind}} days past due` plus overdue/payment message using `{{tier}}`, `{{invoice_number}}`, `{{due_date}}`, `{{balance_due}}`.
+
+Merge fields: `client_name`, `invoice_number`, `balance_due`, `total_amount`, `due_date`, `days_behind`, `tier`, `vendor_name`, `date_of_service`, `services`, `notification_number`, `comments` (optional).
+
+| ID | Requirement |
+|----|-------------|
+| TMP-01 | Per-milestone subject + body stored in `reminder_milestone_templates`; one row per tier |
+| TMP-02 | GET `/reminder-templates` merges configured tiers with stored rows and code defaults |
+| TMP-03 | PATCH saves custom template (`isCustom: true`); POST reset deletes row and restores defaults |
+| TMP-04 | POST `/reminder-templates/preview` renders HTML with sample or live invoice data |
+| TMP-05 | `ReminderRunExecutor` loads custom templates at run start and passes override to email/document render |
+| TMP-06 | Unknown `{{...}}` tokens in vendor text are left unchanged; only documented fields are replaced |
 
 ### 8.3 Eligibility rules (all must pass)
 
@@ -409,11 +428,38 @@ TLS in transit for all connectors; credentials encrypted at rest (KMS/vault). Ha
 
 ## 11. Scheduling
 
-- **SCH-01:** Vendor may create **multiple schedules** (e.g. weekly evaluation + monthly dry-run).
+### 11.1 Two-layer vendor UX (Option C)
+
+Vendors configure reminders in **Settings** using two layers:
+
+**Layer 1 — Reminder rules** (what clients experience)
+- Overdue milestone tiers (`overdue_tiers`), with presets Standard / Gentle / Custom.
+- Delivery channel per invoice (`reminder_delivery_mode`); not configured in the schedule.
+
+**Layer 2 — Processing schedule** (when the system runs)
+- Presets: **Daily**, **Weekly** (pick day + hour), **Manual only**.
+- Master toggle: reminders enabled/disabled.
+- Optional: sync connectors before evaluate.
+- Cron/RRULE hidden from default UI; one **canonical schedule** per deployment synced from Settings.
+
+**Schedules page** (ops): run history, dry-run, manual “Run now”, read-only processing summary. Link back to Settings to edit.
+
+#### 11.1.1 Reminder config API
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/reminder-config` | Combined Layer 1 + Layer 2 view |
+| PATCH | `/reminder-config` | Update tiers + processing; syncs canonical schedule (admin) |
+
+### 11.2 Schedule engine requirements
+
+- **SCH-01:** Vendor may create **multiple schedules** via API (advanced); default UI manages one canonical schedule only.
 - **SCH-02:** Each schedule supports **cron and RRULE**, timezone, enabled flag.
 - **SCH-03:** On trigger: optional sync → eligibility → email and/or document fulfillment → optional vendor digest.
 - **SCH-04:** `dry_run` creates batch and audit preview; no customer email and no document files written.
 - **SCH-05:** `days_behind` uses vendor `timezone`; job execution uses schedule `timezone` (or vendor default).
+- **SCH-06:** Settings `PATCH /reminder-config` upserts canonical schedule (`00000000-0000-4000-8000-000000000001`).
+- **SCH-07:** Processing presets map to cron: daily `0 H * * *`, weekly `0 H * * DOW`; manual sets `enabled = false`.
 
 ---
 
@@ -538,6 +584,10 @@ See [Engineering Standards](../engineering/standards.md) for implementation conv
 - **UI-05:** Import page uses tabs for spreadsheet vs invoice scan.
 - **UI-06:** Invoice scan shows image preview beside editable extracted fields; low-confidence fields are visually flagged.
 - **UI-07:** Confirm import is explicit per scan record; imported scans show a completed state.
+- **UI-08:** Settings exposes Reminder rules (tiers), Email templates (per-milestone subject/body + preview), and Processing schedule (cadence presets).
+- **UI-09:** Schedules page shows human-readable processing summary and run history (not raw cron).
+- **UI-10:** Manual dry-run and live runs available from Schedules page regardless of processing preset.
+- **UI-11:** Settings email template editor: milestone select, subject/body with merge-field chips, preview panel, save and reset to system default.
 
 ---
 
@@ -653,3 +703,5 @@ flowchart TD
 | 1.3 | 2026-06-05 | M1 Excel/CSV import enhancements: templates (xlsx/csv), currency/header normalization, multi-file + batch import, and selective upload delete modes |
 | 1.4 | 2026-06-05 | Vendor UI migrated to Tailwind CSS v4 + shadcn/ui; §17.1 UI requirements (UI-01–04); M4 dashboard stack clarified |
 | 1.5 | 2026-06-12 | Invoice/receipt image scan (§9.1.3): OpenAI vision extraction, review-before-import, Net-30 due date fallback, scan upload persistence (§7.1.3), UI-05–07, `default_payment_terms_days` vendor setting |
+| 1.6 | 2026-06-12 | Option C two-layer reminder scheduling: `/reminder-config` API, Settings reminder/processing cards, Schedules ops view, SCH-06–07, UI-08–10 |
+| 1.7 | 2026-06-12 | Per-milestone email/document templates: `/reminder-templates` API, Settings template editor + preview, TMP-01–06, UI-11; customizable subject/body with merge fields |

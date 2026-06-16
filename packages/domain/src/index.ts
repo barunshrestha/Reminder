@@ -4,3 +4,4 @@ export * from "./tier-once.service";
 export * from "./eligibility.service";
 export * from "./content-hash.service";
 export * from "./schedule-expression";
+export * from "./processing-schedule";

@@ -4,3 +4,16 @@ dist/
 *.log
 .DS_Store
 storage/
+.next/
+apps/api/dist/
+apps/web/dist/
+apps/worker/dist/
+apps/email-templates/dist/
+apps/reminders/dist/
+apps/domain/dist/
+apps/api/node_modules/
+apps/web/node_modules/
+apps/worker/node_modules/
+apps/email-templates/node_modules/
+apps/reminders/node_modules/
+apps/domain/node_modules/

@@ -54,10 +54,24 @@ model VendorSettings {
   vendorName                String?  @map("vendor_name")
   digestEmailEnabled        Boolean  @default(false) @map("digest_email_enabled")
   defaultPaymentTermsDays   Int      @default(30) @map("default_payment_terms_days")
+  remindersEnabled          Boolean  @default(true) @map("reminders_enabled")
+  processingPreset          String   @default("daily") @map("processing_preset")
+  processingRunHour         Int      @default(8) @map("processing_run_hour")
+  processingWeeklyDay       Int      @default(1) @map("processing_weekly_day")
   createdAt                 DateTime @default(now()) @map("created_at")
   updatedAt                 DateTime @updatedAt @map("updated_at")
 
   @@map("vendor_settings")
+}
+
+model ReminderMilestoneTemplate {
+  tierDays  Int      @id @map("tier_days")
+  subject   String
+  bodyHtml  String   @map("body_html")
+  isCustom  Boolean  @default(true) @map("is_custom")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("reminder_milestone_templates")
 }
 
 model Connector {

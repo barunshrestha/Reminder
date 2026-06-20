@@ -58,6 +58,21 @@ export class InvoicesService {
     const existing = await this.findOne(invoiceNumber);
     const before = snapshotFromInvoice(existing);
     const data: Prisma.InvoiceUpdateInput = {};
+    if (dto.client_name !== undefined) {
+      data.clientName = dto.client_name;
+    }
+    if (dto.balance_due !== undefined) {
+      data.balanceDue = new Prisma.Decimal(dto.balance_due);
+    }
+    if (dto.due_date !== undefined) {
+      data.dueDate = new Date(`${dto.due_date}T00:00:00.000Z`);
+    }
+    if (dto.comments !== undefined) {
+      data.comments = dto.comments;
+    }
+    if (dto.last_tier_sent !== undefined) {
+      data.lastTierSent = dto.last_tier_sent;
+    }
     if (dto.send_reminder !== undefined) {
       data.sendReminder = dto.send_reminder;
     }

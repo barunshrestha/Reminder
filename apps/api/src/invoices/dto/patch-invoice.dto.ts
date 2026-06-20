@@ -2,11 +2,37 @@ import {
   IsBoolean,
   IsEmail,
   IsEnum,
+  IsInt,
+  IsNumberString,
   IsOptional,
   IsString,
+  Min,
+  ValidateIf,
 } from "class-validator";
 
 export class PatchVendorInvoiceDto {
+  @IsOptional()
+  @IsString()
+  client_name?: string;
+
+  @IsOptional()
+  @IsNumberString()
+  balance_due?: string;
+
+  @IsOptional()
+  @IsString()
+  due_date?: string;
+
+  @IsOptional()
+  @IsString()
+  comments?: string;
+
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @IsInt()
+  @Min(1)
+  last_tier_sent?: number | null;
+
   @IsOptional()
   @IsBoolean()
   send_reminder?: boolean;

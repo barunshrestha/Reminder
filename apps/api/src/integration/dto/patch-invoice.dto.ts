@@ -45,8 +45,8 @@ export class PatchIntegrationInvoiceDto {
   consent_email?: boolean;
 
   @IsOptional()
-  @IsEnum(["email", "document_only"])
-  reminder_delivery_mode?: "email" | "document_only";
+  @IsEnum(["email", "phone", "document_only", "na"])
+  reminder_delivery_mode?: "email" | "phone" | "document_only" | "na";
 
   @IsOptional()
   @IsEnum(["open", "paid", "closed"])

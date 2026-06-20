@@ -31,6 +31,16 @@ export function evaluateEligibility(
     }
   }
 
+  if (invoice.reminderDeliveryMode === "phone") {
+    if (!invoice.clientPhone?.trim()) {
+      failures.push({ rule: "ELIG-09", message: "invalid or missing client_phone" });
+    }
+  }
+
+  if (invoice.reminderDeliveryMode === "na") {
+    failures.push({ rule: "ELIG-08", message: "delivery mode is N/A" });
+  }
+
   const nextTier = getNextTier(
     invoice.daysBehind,
     invoice.lastTierSent,

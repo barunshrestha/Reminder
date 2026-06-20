@@ -330,10 +330,7 @@ export class InvoiceUpsertService {
       paidAt: paidOrZero ? new Date() : null,
       emailOptOut: input.emailOptOut ?? false,
       consentEmail: input.consentEmail ?? true,
-      reminderDeliveryMode:
-        input.reminderDeliveryMode === "document_only"
-          ? PrismaDeliveryMode.document_only
-          : PrismaDeliveryMode.email,
+      reminderDeliveryMode: mapDeliveryMode(input.reminderDeliveryMode),
       contentHash,
       lastSeenAt: new Date(),
       isActive: true,
@@ -360,5 +357,20 @@ function mapStatus(status: InvoiceStatus): PrismaInvoiceStatus {
       return PrismaInvoiceStatus.closed;
     default:
       return PrismaInvoiceStatus.open;
+  }
+}
+
+function mapDeliveryMode(
+  mode?: ReminderDeliveryMode,
+): PrismaDeliveryMode {
+  switch (mode) {
+    case "phone":
+      return PrismaDeliveryMode.phone;
+    case "document_only":
+      return PrismaDeliveryMode.document_only;
+    case "na":
+      return PrismaDeliveryMode.na;
+    default:
+      return PrismaDeliveryMode.email;
   }
 }

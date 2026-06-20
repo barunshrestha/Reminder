@@ -1,6 +1,6 @@
 export type InvoiceStatus = "open" | "paid" | "closed";
 
-export type ReminderDeliveryMode = "email" | "document_only";
+export type ReminderDeliveryMode = "email" | "phone" | "document_only" | "na";
 
 export interface InvoiceRecord {
   clientName: string;

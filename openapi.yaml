@@ -154,7 +154,7 @@ components:
           type: boolean
         reminder_delivery_mode:
           type: string
-          enum: [email, document_only]
+          enum: [email, phone, document_only, na]
         status:
           type: string
           enum: [open, paid, closed]

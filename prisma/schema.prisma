@@ -15,7 +15,9 @@ enum InvoiceStatus {
 
 enum ReminderDeliveryMode {
   email
+  phone
   document_only
+  na
 }
 
 enum UserRole {

@@ -22,7 +22,7 @@ export interface MappedInvoiceRow {
   sendReminder: boolean;
   emailOptOut: boolean;
   consentEmail: boolean;
-  reminderDeliveryMode: "email" | "document_only";
+  reminderDeliveryMode: "email" | "phone" | "document_only" | "na";
 }
 
 export interface RowValidationError {
@@ -139,10 +139,16 @@ export function mapSpreadsheetRow(
   };
 }
 
-function parseDeliveryMode(value?: string): "email" | "document_only" {
-  const v = (value ?? "email").toLowerCase().replace(/\s+/g, "_");
+function parseDeliveryMode(value?: string): "email" | "phone" | "document_only" | "na" {
+  const v = (value ?? "email").toLowerCase().replace(/[\s-]+/g, "_");
   if (v === "document_only" || v === "document") {
     return "document_only";
+  }
+  if (v === "phone") {
+    return "phone";
+  }
+  if (v === "na" || v === "n_a") {
+    return "na";
   }
   return "email";
 }

@@ -33,6 +33,8 @@ type Invoice = {
   comments?: string | null;
 };
 
+const STATUS_OPTIONS = ["open", "paid", "closed"] as const;
+
 function formatDate(value?: string | null) {
   if (!value) return "—";
   return value.slice(0, 10);
@@ -57,6 +59,27 @@ export default function InvoicesPage() {
   useEffect(() => {
     api<Invoice[]>("/invoices?status=open").then(setInvoices).catch(console.error);
   }, []);
+
+  async function updateStatus(invoiceNumber: string, status: string) {
+    const updated = await api<Invoice>(
+      `/invoices/${encodeURIComponent(invoiceNumber)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      },
+    );
+    setInvoices((list) =>
+      list.map((i) =>
+        i.invoiceNumber === invoiceNumber
+          ? {
+              ...i,
+              status: updated.status,
+              paidAt: updated.paidAt ?? i.paidAt,
+            }
+          : i,
+      ),
+    );
+  }
 
   async function toggleSend(invoiceNumber: string, current: boolean) {
     await api(`/invoices/${encodeURIComponent(invoiceNumber)}`, {
@@ -113,7 +136,21 @@ export default function InvoicesPage() {
                     <TableCell>{inv.clientEmail || "—"}</TableCell>
                     <TableCell>{inv.clientPhone || "—"}</TableCell>
                     <TableCell>{formatDate(inv.dueDate)}</TableCell>
-                    <TableCell>{formatStatus(inv.status)}</TableCell>
+                    <TableCell>
+                      <select
+                        value={inv.status}
+                        onChange={(e) =>
+                          void updateStatus(inv.invoiceNumber, e.target.value)
+                        }
+                        className="w-full min-w-[6rem] rounded border border-stroke bg-transparent px-2 py-1 text-sm text-black outline-none focus:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
+                      >
+                        {STATUS_OPTIONS.map((status) => (
+                          <option key={status} value={status}>
+                            {formatStatus(status)}
+                          </option>
+                        ))}
+                      </select>
+                    </TableCell>
                     <TableCell>{inv.notificationNumber}</TableCell>
                     <TableCell>
                       {formatDeliveryMode(inv.reminderDeliveryMode)}

@@ -2,9 +2,10 @@ import {
   BadRequestException,
   Injectable,
 } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { ImportResolution, ImportSource, Prisma } from "@prisma/client";
 import { AuditService } from "../../audit/audit.service";
-import { InvoiceUpsertService } from "../../invoices/invoice-upsert.service";
+import { ImportAnalyzeService } from "../../import/import-analyze.service";
+import { ImportCommitService } from "../../import/import-commit.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { InvoiceExtractionService } from "./invoice-extraction.service";
 import {
@@ -33,7 +34,8 @@ export class InvoiceScanService {
   constructor(
     private readonly extraction: InvoiceExtractionService,
     private readonly uploads: InvoiceScanUploadService,
-    private readonly upsert: InvoiceUpsertService,
+    private readonly analyze: ImportAnalyzeService,
+    private readonly commit: ImportCommitService,
     private readonly audit: AuditService,
     private readonly prisma: PrismaService,
   ) {}
@@ -111,42 +113,156 @@ export class InvoiceScanService {
   async confirmOne(
     input: ConfirmScanInvoiceInput,
     uploadedByUserId?: string,
+    resolutionParam?: ImportResolution,
   ): Promise<ConfirmScanResult> {
     const errors = validateConfirmScanInput(input);
     if (errors.length > 0) {
       throw new BadRequestException({ message: "Validation failed", errors });
     }
 
+    const resolution = input.resolution ?? resolutionParam;
     const upload = await this.uploads.findById(input.scanId);
-    if (upload.confirmedFields) {
+    if (upload.confirmedFields && !resolution) {
       throw new BadRequestException("This scan has already been imported");
     }
 
-    const totalAmount = parseMoneyAmount(input.totalAmount)!;
-    const balanceDue = parseMoneyAmount(input.balanceDue)!;
-    const dueDate = normalizeIsoDate(input.dueDate)!;
-    const services = normalizeServices(input.services);
-    const clientEmail = input.clientEmail?.trim() || undefined;
-    const dateOfService = normalizeIsoDate(input.dateOfService) ?? null;
+    if (resolution && input.batchId && input.importRowId) {
+      const commitResult = await this.commit.commitBatch(
+        input.batchId,
+        [{ importRowId: input.importRowId, resolution }],
+        { userId: uploadedByUserId },
+      );
+      if (commitResult.errors.length > 0) {
+        throw new BadRequestException(commitResult.errors[0]!.message);
+      }
 
-    const { outcome, invoiceId } = await this.upsert.upsertOne({
-      clientName: input.clientName.trim(),
-      invoiceNumber: input.invoiceNumber.trim(),
-      totalAmount,
-      balanceDue,
-      dueDate,
-      dateOfService,
-      services,
-      clientEmail: clientEmail ?? null,
-      reminderDeliveryMode: clientEmail ? "email" : "document_only",
-      comments: `Imported from scan ${upload.id}`,
-    });
+      const importRow = await this.prisma.importRow.findUnique({
+        where: { id: input.importRowId },
+      });
+      const invoiceId = importRow?.invoiceId;
+      if (!invoiceId) {
+        throw new BadRequestException("Import did not produce an invoice");
+      }
+
+      const outcome: ConfirmScanResult["outcome"] =
+        resolution === ImportResolution.keep
+          ? "skipped"
+          : resolution === ImportResolution.update
+            ? "updated"
+            : "inserted";
+
+      await this.uploads.updateUpload(upload.id, {
+        confirmedFields: input as unknown as Prisma.InputJsonValue,
+        stats: {
+          outcome,
+          invoice_number: input.invoiceNumber.trim(),
+          batch_id: input.batchId,
+          import_row_id: input.importRowId,
+        },
+        uploadedBy: uploadedByUserId
+          ? { connect: { id: uploadedByUserId } }
+          : undefined,
+      });
+
+      await this.uploads.linkInvoice(
+        upload.id,
+        invoiceId,
+        input.invoiceNumber.trim(),
+        input.importRowId,
+      );
+
+      await this.audit.record("import.scan.confirm", {
+        scan_id: upload.id,
+        invoice_id: invoiceId,
+        invoice_number: input.invoiceNumber.trim(),
+        outcome,
+        batch_id: input.batchId,
+        import_row_id: input.importRowId,
+        resolution,
+      });
+
+      return {
+        scanId: upload.id,
+        invoiceId,
+        invoiceNumber: input.invoiceNumber.trim(),
+        outcome,
+        batchId: input.batchId,
+        importRowId: input.importRowId,
+      };
+    }
+
+    const mapped = this.buildMappedInput(input);
+    const batchResult = await this.analyze.analyzeBatch(
+      [
+        {
+          rowNumber: 1,
+          rawPayload: input as unknown as Record<string, unknown>,
+          mapped,
+        },
+      ],
+      {
+        source: ImportSource.scan,
+        scanUploadId: upload.id,
+        createdByUserId: uploadedByUserId,
+        changeSource: "import.scan",
+      },
+    );
+
+    const row = batchResult.rows[0]!;
+
+    if (row.status === "conflict" && !resolution) {
+      return {
+        scanId: upload.id,
+        invoiceNumber: input.invoiceNumber.trim(),
+        outcome: "conflict",
+        batchId: batchResult.batchId,
+        importRowId: row.importRowId,
+        existing: row.existing,
+        incoming: row.incoming,
+        changedFields: row.changedFields,
+      };
+    }
+
+    let invoiceId = row.invoiceId;
+    let outcome: ConfirmScanResult["outcome"] =
+      row.status === "new" || row.status === "imported"
+        ? "inserted"
+        : row.status === "unchanged"
+          ? "skipped"
+          : "updated";
+
+    if (row.status === "conflict" && resolution) {
+      const commitResult = await this.commit.commitBatch(
+        batchResult.batchId,
+        [{ importRowId: row.importRowId, resolution }],
+        { userId: uploadedByUserId },
+      );
+      if (commitResult.errors.length > 0) {
+        throw new BadRequestException(commitResult.errors[0]!.message);
+      }
+      outcome =
+        resolution === ImportResolution.keep
+          ? "skipped"
+          : resolution === ImportResolution.update
+            ? "updated"
+            : "inserted";
+      const updatedRow = await this.prisma.importRow.findUnique({
+        where: { id: row.importRowId },
+      });
+      invoiceId = updatedRow?.invoiceId ?? undefined;
+    }
+
+    if (!invoiceId) {
+      throw new BadRequestException("Import did not produce an invoice");
+    }
 
     await this.uploads.updateUpload(upload.id, {
       confirmedFields: input as unknown as Prisma.InputJsonValue,
       stats: {
         outcome,
         invoice_number: input.invoiceNumber.trim(),
+        batch_id: batchResult.batchId,
+        import_row_id: row.importRowId,
       },
       uploadedBy: uploadedByUserId
         ? { connect: { id: uploadedByUserId } }
@@ -157,6 +273,7 @@ export class InvoiceScanService {
       upload.id,
       invoiceId,
       input.invoiceNumber.trim(),
+      row.importRowId,
     );
 
     await this.audit.record("import.scan.confirm", {
@@ -164,6 +281,8 @@ export class InvoiceScanService {
       invoice_id: invoiceId,
       invoice_number: input.invoiceNumber.trim(),
       outcome,
+      batch_id: batchResult.batchId,
+      import_row_id: row.importRowId,
     });
 
     return {
@@ -171,6 +290,8 @@ export class InvoiceScanService {
       invoiceId,
       invoiceNumber: input.invoiceNumber.trim(),
       outcome,
+      batchId: batchResult.batchId,
+      importRowId: row.importRowId,
     };
   }
 
@@ -213,6 +334,30 @@ export class InvoiceScanService {
       stream: this.uploads.createReadStream(upload.storedPath),
       mimeType: upload.mimeType,
       filename: upload.originalFilename,
+    };
+  }
+
+  private buildMappedInput(input: ConfirmScanInvoiceInput) {
+    const totalAmount = parseMoneyAmount(input.totalAmount)!;
+    const balanceDue = parseMoneyAmount(input.balanceDue)!;
+    const dueDate = normalizeIsoDate(input.dueDate)!;
+    const services = normalizeServices(input.services);
+    const clientEmail = input.clientEmail?.trim() || undefined;
+    const dateOfService = normalizeIsoDate(input.dateOfService) ?? null;
+
+    return {
+      clientName: input.clientName.trim(),
+      invoiceNumber: input.invoiceNumber.trim(),
+      totalAmount,
+      balanceDue,
+      dueDate,
+      dateOfService,
+      services,
+      clientEmail: clientEmail ?? null,
+      reminderDeliveryMode: (clientEmail ? "email" : "document_only") as
+        | "email"
+        | "document_only",
+      comments: `Imported from scan ${input.scanId}`,
     };
   }
 

@@ -78,7 +78,11 @@ export class SpreadsheetUploadService {
 
   async linkInvoices(
     uploadId: string,
-    links: Array<{ invoiceId: string; invoiceNumber: string }>,
+    links: Array<{
+      invoiceId: string;
+      invoiceNumber: string;
+      importRowId?: string;
+    }>,
   ): Promise<void> {
     await this.prisma.spreadsheetUploadInvoice.deleteMany({
       where: { uploadId },
@@ -91,6 +95,7 @@ export class SpreadsheetUploadService {
         uploadId,
         invoiceId: link.invoiceId,
         invoiceNumber: link.invoiceNumber,
+        importRowId: link.importRowId ?? null,
       })),
     });
   }

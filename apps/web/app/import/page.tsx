@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ImportConflictReview } from "@/components/import/import-conflict-review";
 import { DeleteUploadDialog } from "@/components/import/delete-upload-dialog";
 import { DropZone } from "@/components/import/drop-zone";
 import { HeaderMapper } from "@/components/import/header-mapper";
@@ -22,12 +23,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import Link from "next/link";
 import {
   ApiConflictError,
+  analyzeSpreadsheet,
+  commitImportBatch,
   deleteSpreadsheetUpload,
+  type AnalyzeSpreadsheetResult,
   type DeleteUploadMode,
   downloadImportTemplate,
-  importSpreadsheet,
   listMappingProfiles,
   listSpreadsheetUploads,
   previewSpreadsheet,
@@ -74,6 +78,8 @@ export default function ImportPage() {
   const [importErrors, setImportErrors] = useState<
     Array<{ row: number; field?: string; message: string }>
   >([]);
+  const [conflictReview, setConflictReview] =
+    useState<AnalyzeSpreadsheetResult | null>(null);
 
   const selectedProfile = profiles.find((p) => p.id === profileId);
 
@@ -120,7 +126,7 @@ export default function ImportPage() {
   }
 
   async function uploadOne(file: File, override = false) {
-    return importSpreadsheet(file, {
+    return analyzeSpreadsheet(file, {
       mappingProfileId: profileId,
       columnMap: effectiveColumnMap,
       override,
@@ -161,7 +167,28 @@ export default function ImportPage() {
           if (result.errors.length > 0) {
             setImportErrors((prev) => [...prev, ...result.errors]);
           }
-          const summary = `Inserted ${result.inserted}, updated ${result.updated}, skipped ${result.skippedUnchanged}, errors ${result.errors.length}`;
+
+          if (result.summary.conflict > 0) {
+            setConflictReview(result);
+            setQueue((q) =>
+              q.map((row) =>
+                row.id === item.id
+                  ? {
+                      ...row,
+                      status: "blocked",
+                      message: `${result.summary.conflict} conflicts need review`,
+                    }
+                  : row,
+              ),
+            );
+            setBusy(false);
+            setStatusMessage(
+              "Some rows conflict with existing invoices. Review below.",
+            );
+            return;
+          }
+
+          const summary = `Inserted ${result.summary.new}, skipped unchanged ${result.summary.unchanged}, errors ${result.errors.length}`;
           setQueue((q) =>
             q.map((row) =>
               row.id === item.id
@@ -330,6 +357,40 @@ export default function ImportPage() {
     }
   }
 
+  async function onCommitConflicts(
+    decisions: Array<{
+      importRowId: string;
+      resolution: "update" | "keep" | "delete_existing";
+    }>,
+  ) {
+    if (!conflictReview) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await commitImportBatch(
+        conflictReview.batchId,
+        decisions,
+      );
+      setConflictReview(null);
+      setQueue((q) =>
+        q.map((row) =>
+          row.status === "blocked"
+            ? {
+                ...row,
+                status: "done",
+                message: `Resolved: ${result.updated} updated, ${result.skipped} kept, ${result.deleted} deleted, ${result.inserted} inserted`,
+              }
+            : row,
+        ),
+      );
+      setStatusMessage("Conflict resolutions applied.");
+      await refreshUploads();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <>
       <Card>
@@ -381,8 +442,11 @@ export default function ImportPage() {
       </Card>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Upload files</CardTitle>
+          <Button type="button" variant="outline" size="sm" asChild>
+            <Link href="/import/conflicts">Pending conflicts</Link>
+          </Button>
         </CardHeader>
         <CardContent className="space-y-4">
           <DropZone disabled={!profileId || busy} onFiles={onFilesSelected} />
@@ -440,6 +504,17 @@ export default function ImportPage() {
           ) : null}
         </CardContent>
       </Card>
+
+      {conflictReview ? (
+        <ImportConflictReview
+          batchId={conflictReview.batchId}
+          rows={conflictReview.rows}
+          summary={conflictReview.summary}
+          busy={busy}
+          onCommit={onCommitConflicts}
+          onCancel={() => setConflictReview(null)}
+        />
+      ) : null}
 
       {preview && (preview.unknownHeaders.length > 0 || headerMappings) ? (
         <HeaderMapper

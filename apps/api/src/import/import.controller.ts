@@ -14,6 +14,7 @@ import {
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor, FilesInterceptor } from "@nestjs/platform-express";
+import { ImportResolution } from "@prisma/client";
 import { CurrentUser } from "../auth/current-user.decorator";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { ImportService } from "./import.service";
@@ -101,6 +102,16 @@ export class ImportController {
     return this.uploads.listUploads();
   }
 
+  @Get("batches/pending")
+  listPendingBatches() {
+    return this.importService.listPendingBatches();
+  }
+
+  @Get("batches/:batchId")
+  getBatch(@Param("batchId") batchId: string) {
+    return this.importService.getBatch(batchId);
+  }
+
   @Delete("uploads/:id")
   async deleteUpload(
     @Param("id") id: string,
@@ -127,6 +138,54 @@ export class ImportController {
       mappingProfileId,
       columnMap: parseColumnMap(columnMapJson),
     });
+  }
+
+  @Post("spreadsheet/analyze")
+  @UseInterceptors(
+    FileInterceptor("file", { limits: { fileSize: 25 * 1024 * 1024 } }),
+  )
+  async analyzeSpreadsheet(
+    @UploadedFile() file: Express.Multer.File,
+    @Body("mappingProfileId") mappingProfileId?: string,
+    @Body("columnMap") columnMapJson?: string,
+    @Body("override") override?: string,
+    @CurrentUser() user?: { id: string },
+  ) {
+    if (!file) {
+      throw new BadRequestException("file is required");
+    }
+    return this.importService.analyzeSpreadsheet(
+      file.buffer,
+      file.originalname,
+      {
+        mappingProfileId,
+        columnMap: parseColumnMap(columnMapJson),
+        override: parseOverride(override),
+        uploadedByUserId: user?.id,
+      },
+    );
+  }
+
+  @Post("batches/:batchId/commit")
+  async commitBatch(
+    @Param("batchId") batchId: string,
+    @Body()
+    body: {
+      decisions: Array<{
+        importRowId: string;
+        resolution: ImportResolution;
+      }>;
+    },
+    @CurrentUser() user?: { id: string },
+  ) {
+    if (!body.decisions?.length) {
+      throw new BadRequestException("decisions are required");
+    }
+    return this.importService.commitSpreadsheetBatch(
+      batchId,
+      body.decisions,
+      user?.id,
+    );
   }
 
   @Post("spreadsheet")

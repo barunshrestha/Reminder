@@ -30,6 +30,44 @@ enum ScheduleRunStatus {
   failed
 }
 
+enum ImportSource {
+  spreadsheet
+  scan
+  integration
+  connector
+}
+
+enum ImportBatchStatus {
+  analyzing
+  pending_review
+  committed
+  partial
+}
+
+enum ImportRowStatus {
+  new
+  unchanged
+  conflict
+  duplicate_in_file
+  error
+  imported
+  skipped
+  deleted
+}
+
+enum ImportResolution {
+  update
+  keep
+  delete_existing
+}
+
+enum InvoiceChangeAction {
+  inserted
+  updated
+  skipped
+  deleted
+}
+
 model User {
   id           String   @id @default(uuid()) @db.Uuid
   email        String   @unique
@@ -40,6 +78,8 @@ model User {
 
   spreadsheetUploads SpreadsheetUpload[]
   invoiceScanUploads InvoiceScanUpload[]
+  importBatches      ImportBatch[]
+  resolvedImportRows ImportRow[]
 
   @@map("users")
 }
@@ -85,6 +125,8 @@ model Connector {
   lastSyncStats  Json?     @map("last_sync_stats")
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  importBatches ImportBatch[]
 
   @@map("connectors")
 }
@@ -133,6 +175,8 @@ model Invoice {
   tierNotifications     TierNotification[]
   spreadsheetUploads    SpreadsheetUploadInvoice[]
   invoiceScanUploads    InvoiceScanUploadInvoice[]
+  importRows            ImportRow[]
+  changeLogs            InvoiceChangeLog[]
 
   @@unique([externalClientId, invoiceNumber])
   @@index([dueDate])
@@ -223,6 +267,9 @@ model ApiKey {
   revokedAt  DateTime? @map("revoked_at")
   createdAt  DateTime  @default(now()) @map("created_at")
 
+  importBatches ImportBatch[]
+  changeLogs    InvoiceChangeLog[]
+
   @@map("api_keys")
 }
 
@@ -263,17 +310,20 @@ model SpreadsheetUpload {
   mappingProfile MappingProfile             @relation(fields: [mappingProfileId], references: [id])
   uploadedBy     User?                      @relation(fields: [uploadedByUserId], references: [id])
   invoices       SpreadsheetUploadInvoice[]
+  importBatches  ImportBatch[]
 
   @@map("spreadsheet_uploads")
 }
 
 model SpreadsheetUploadInvoice {
-  uploadId      String @map("upload_id") @db.Uuid
-  invoiceId     String @map("invoice_id") @db.Uuid
-  invoiceNumber String @map("invoice_number")
+  uploadId      String  @map("upload_id") @db.Uuid
+  invoiceId     String  @map("invoice_id") @db.Uuid
+  invoiceNumber String  @map("invoice_number")
+  importRowId   String? @unique @map("import_row_id") @db.Uuid
 
-  upload  SpreadsheetUpload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
-  invoice Invoice           @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  upload    SpreadsheetUpload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  invoice   Invoice           @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  importRow ImportRow?        @relation(fields: [importRowId], references: [id])
 
   @@id([uploadId, invoiceId])
   @@index([invoiceNumber])
@@ -291,21 +341,101 @@ model InvoiceScanUpload {
   uploadedByUserId String?  @map("uploaded_by_user_id") @db.Uuid
   createdAt        DateTime @default(now()) @map("created_at")
 
-  uploadedBy User?                      @relation(fields: [uploadedByUserId], references: [id])
-  invoices   InvoiceScanUploadInvoice[]
+  uploadedBy    User?                      @relation(fields: [uploadedByUserId], references: [id])
+  invoices      InvoiceScanUploadInvoice[]
+  importBatches ImportBatch[]
 
   @@map("invoice_scan_uploads")
 }
 
 model InvoiceScanUploadInvoice {
-  uploadId      String @map("upload_id") @db.Uuid
-  invoiceId     String @map("invoice_id") @db.Uuid
-  invoiceNumber String @map("invoice_number")
+  uploadId      String  @map("upload_id") @db.Uuid
+  invoiceId     String  @map("invoice_id") @db.Uuid
+  invoiceNumber String  @map("invoice_number")
+  importRowId   String? @unique @map("import_row_id") @db.Uuid
 
-  upload  InvoiceScanUpload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
-  invoice Invoice           @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  upload    InvoiceScanUpload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  invoice   Invoice           @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  importRow ImportRow?        @relation(fields: [importRowId], references: [id])
 
   @@id([uploadId, invoiceId])
   @@index([invoiceNumber])
   @@map("invoice_scan_upload_invoices")
+}
+
+model ImportBatch {
+  id                  String            @id @default(uuid()) @db.Uuid
+  source              ImportSource
+  status              ImportBatchStatus @default(analyzing)
+  spreadsheetUploadId String?           @map("spreadsheet_upload_id") @db.Uuid
+  scanUploadId        String?           @map("scan_upload_id") @db.Uuid
+  connectorId         String?           @map("connector_id") @db.Uuid
+  apiKeyId            String?           @map("api_key_id") @db.Uuid
+  createdByUserId     String?           @map("created_by_user_id") @db.Uuid
+  stats               Json?
+  createdAt           DateTime          @default(now()) @map("created_at")
+
+  spreadsheetUpload SpreadsheetUpload? @relation(fields: [spreadsheetUploadId], references: [id], onDelete: SetNull)
+  scanUpload        InvoiceScanUpload? @relation(fields: [scanUploadId], references: [id], onDelete: SetNull)
+  connector         Connector?         @relation(fields: [connectorId], references: [id], onDelete: SetNull)
+  apiKey            ApiKey?            @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+  createdBy         User?              @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  rows              ImportRow[]
+
+  @@index([status])
+  @@index([source])
+  @@map("import_batches")
+}
+
+model ImportRow {
+  id                String            @id @default(uuid()) @db.Uuid
+  batchId           String            @map("batch_id") @db.Uuid
+  rowNumber         Int               @map("row_number")
+  invoiceNumber     String            @map("invoice_number")
+  invoiceId         String?           @map("invoice_id") @db.Uuid
+  rawPayload        Json              @map("raw_payload")
+  mappedPayload     Json              @map("mapped_payload")
+  status            ImportRowStatus
+  existingSnapshot  Json?             @map("existing_snapshot")
+  changedFields     String[]          @default([]) @map("changed_fields")
+  resolution        ImportResolution? @map("resolution")
+  resolvedByUserId  String?           @map("resolved_by_user_id") @db.Uuid
+  resolvedAt        DateTime?         @map("resolved_at")
+  errorMessage      String?           @map("error_message")
+  createdAt         DateTime          @default(now()) @map("created_at")
+
+  batch                  ImportBatch               @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  invoice                Invoice?                  @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  resolvedBy             User?                     @relation(fields: [resolvedByUserId], references: [id], onDelete: SetNull)
+  spreadsheetUploadLink  SpreadsheetUploadInvoice?
+  scanUploadLink         InvoiceScanUploadInvoice?
+  changeLogs             InvoiceChangeLog[]
+
+  @@unique([batchId, rowNumber])
+  @@index([invoiceNumber])
+  @@index([status])
+  @@map("import_rows")
+}
+
+model InvoiceChangeLog {
+  id              String              @id @default(uuid()) @db.Uuid
+  invoiceId       String?             @map("invoice_id") @db.Uuid
+  invoiceNumber   String              @map("invoice_number")
+  source          String
+  action          InvoiceChangeAction
+  importRowId     String?             @map("import_row_id") @db.Uuid
+  actorUserId     String?             @map("actor_user_id") @db.Uuid
+  actorApiKeyId   String?             @map("actor_api_key_id") @db.Uuid
+  before          Json?
+  after           Json?
+  createdAt       DateTime            @default(now()) @map("created_at")
+
+  invoice     Invoice?  @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  importRow   ImportRow? @relation(fields: [importRowId], references: [id], onDelete: SetNull)
+  actorApiKey ApiKey?   @relation(fields: [actorApiKeyId], references: [id], onDelete: SetNull)
+
+  @@index([invoiceNumber])
+  @@index([invoiceId])
+  @@index([createdAt])
+  @@map("invoice_change_logs")
 }

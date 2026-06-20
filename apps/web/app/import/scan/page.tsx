@@ -15,6 +15,7 @@ import {
   extractInvoiceScanBatch,
   listInvoiceScanUploads,
   type ConfirmScanInvoiceInput,
+  type ConfirmScanResult,
   type InvoiceScanUploadItem,
   type ScanExtractionPreview,
 } from "@/lib/api";
@@ -73,15 +74,18 @@ export default function ImportScanPage() {
     }
   }
 
-  async function onConfirmOne(input: ConfirmScanInvoiceInput) {
+  async function onConfirmOne(input: ConfirmScanInvoiceInput): Promise<ConfirmScanResult> {
     setBusy(true);
     try {
       const result = await confirmInvoiceScan(input);
-      setConfirmedIds((ids) => new Set(ids).add(result.scanId));
-      setStatusMessage(
-        `Invoice ${result.invoiceNumber} ${result.outcome === "inserted" ? "created" : result.outcome}.`,
-      );
-      await refreshHistory();
+      if (result.outcome !== "conflict") {
+        setConfirmedIds((ids) => new Set(ids).add(result.scanId));
+        setStatusMessage(
+          `Invoice ${result.invoiceNumber} ${result.outcome === "inserted" ? "created" : result.outcome}.`,
+        );
+        await refreshHistory();
+      }
+      return result;
     } finally {
       setBusy(false);
     }

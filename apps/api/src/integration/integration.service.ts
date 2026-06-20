@@ -3,11 +3,18 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { ImportResolution, ImportSource } from "@prisma/client";
 import { AuditService } from "../audit/audit.service";
+import {
+  ImportAnalyzeService,
+  type AnalyzeRowInput,
+} from "../import/import-analyze.service";
+import { ImportCommitService } from "../import/import-commit.service";
 import {
   InvoiceUpsertService,
   type UpsertInvoiceInput,
 } from "../invoices/invoice-upsert.service";
+import { snapshotFromInvoice } from "../invoices/invoice-snapshot.util";
 import { PrismaService } from "../prisma/prisma.service";
 import type { BulkInvoicesDto } from "./dto/bulk-invoices.dto";
 import type { PatchIntegrationInvoiceDto } from "./dto/patch-invoice.dto";
@@ -17,6 +24,8 @@ import { IdempotencyService } from "./idempotency.service";
 export class IntegrationService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly analyze: ImportAnalyzeService,
+    private readonly commit: ImportCommitService,
     private readonly upsert: InvoiceUpsertService,
     private readonly idempotency: IdempotencyService,
     private readonly audit: AuditService,
@@ -32,6 +41,7 @@ export class IntegrationService {
 
   async bulkUpsert(
     dto: BulkInvoicesDto,
+    apiKeyId?: string,
     idempotencyKey?: string,
   ) {
     const route = "POST /integration/invoices/bulk";
@@ -42,17 +52,76 @@ export class IntegrationService {
       }
     }
 
-    const inputs = dto.invoices.map((row) => mapIntegrationRow(row));
-    const result = await this.upsert.upsertBatch(inputs, {
-      completeSync: dto.complete_sync ?? false,
+    const analyzeRows: AnalyzeRowInput[] = [];
+    for (let i = 0; i < dto.invoices.length; i++) {
+      const row = dto.invoices[i]!;
+      try {
+        const mapped = mapIntegrationRow(row);
+        analyzeRows.push({
+          rowNumber: i + 1,
+          rawPayload: row as unknown as Record<string, unknown>,
+          mapped,
+        });
+      } catch (error) {
+        analyzeRows.push({
+          rowNumber: i + 1,
+          rawPayload: row as unknown as Record<string, unknown>,
+          mapped: {
+            clientName: row.client_name ?? "",
+            invoiceNumber: row.invoice_number ?? `__error_${i + 1}`,
+            totalAmount: row.total_amount ?? "0",
+            balanceDue: row.balance_due ?? "0",
+            dueDate: row.due_date ?? "1970-01-01",
+          },
+          errorMessage:
+            error instanceof Error ? error.message : "Invalid row",
+        });
+      }
+    }
+
+    const batchResult = await this.analyze.analyzeBatch(analyzeRows, {
+      source: ImportSource.integration,
+      apiKeyId,
+      changeSource: "integration",
     });
 
+    let deactivated = 0;
+    let missedSyncIncrements = 0;
+    if (dto.complete_sync) {
+      const seen = batchResult.rows
+        .filter((r) => r.status !== "conflict" && r.status !== "error")
+        .map((r) => r.invoiceNumber);
+      const finalize = await this.upsert.finalizeSync(seen);
+      deactivated = finalize.deactivated;
+      missedSyncIncrements = finalize.missedSyncIncrements;
+    }
+
+    const conflicts = batchResult.rows
+      .filter((r) => r.status === "conflict")
+      .map((r) => ({
+        import_row_id: r.importRowId,
+        invoice_number: r.invoiceNumber,
+        existing: r.existing,
+        incoming: r.incoming,
+        changed_fields: r.changedFields,
+      }));
+
     const response = {
-      inserted: result.inserted,
-      updated: result.updated,
-      skipped_unchanged: result.skippedUnchanged,
-      deactivated: result.deactivated,
-      missed_sync_increments: result.missedSyncIncrements,
+      batch_id: batchResult.batchId,
+      inserted: batchResult.summary.new,
+      updated: 0,
+      skipped_unchanged: batchResult.summary.unchanged,
+      conflicts,
+      errors: batchResult.rows
+        .filter((r) => r.status === "error" || r.status === "duplicate_in_file")
+        .map((r) => ({
+          import_row_id: r.importRowId,
+          invoice_number: r.invoiceNumber,
+          message: r.errorMessage,
+        })),
+      deactivated,
+      missed_sync_increments: missedSyncIncrements,
+      conflicts_pending: conflicts.length,
     };
 
     await this.audit.record("integration.bulk_upsert", {
@@ -68,9 +137,51 @@ export class IntegrationService {
     return response;
   }
 
+  async resolveBulk(
+    batchId: string,
+    decisions: Array<{ import_row_id: string; resolution: ImportResolution }>,
+    apiKeyId?: string,
+    idempotencyKey?: string,
+  ) {
+    const route = `POST /integration/invoices/bulk/${batchId}/resolve`;
+    if (idempotencyKey) {
+      const cached = await this.idempotency.getCached(idempotencyKey, route);
+      if (cached) {
+        return cached;
+      }
+    }
+
+    const result = await this.commit.commitBatch(
+      batchId,
+      decisions.map((d) => ({
+        importRowId: d.import_row_id,
+        resolution: d.resolution,
+      })),
+      { apiKeyId },
+    );
+
+    const response = {
+      batch_id: batchId,
+      updated: result.updated,
+      skipped: result.skipped,
+      deleted: result.deleted,
+      inserted: result.inserted,
+      errors: result.errors,
+    };
+
+    await this.audit.record("integration.bulk_resolve", response);
+
+    if (idempotencyKey) {
+      await this.idempotency.store(idempotencyKey, route, response);
+    }
+
+    return response;
+  }
+
   async patchInvoice(
     invoiceNumber: string,
     dto: PatchIntegrationInvoiceDto,
+    apiKeyId?: string,
     idempotencyKey?: string,
   ) {
     const route = `PATCH /integration/invoices/${invoiceNumber}`;
@@ -117,13 +228,28 @@ export class IntegrationService {
       );
     }
 
-    const { outcome } = await this.upsert.upsertOne(input);
-    const response = { invoice_number: invoiceNumber, outcome };
+    const classification = this.upsert.classify(existing, input);
+    if (classification === "unchanged") {
+      const response = { invoice_number: invoiceNumber, outcome: "skipped" };
+      if (idempotencyKey) {
+        await this.idempotency.store(idempotencyKey, route, response);
+      }
+      return response;
+    }
+
+    const before = snapshotFromInvoice(existing);
+    const { invoiceId } = await this.upsert.updateExisting(existing, input, {
+      source: "integration",
+      actorApiKeyId: apiKeyId,
+    });
+
+    const response = { invoice_number: invoiceNumber, outcome: "updated", invoice_id: invoiceId };
 
     await this.audit.record("integration.invoice_patched", {
       invoice_number: invoiceNumber,
-      outcome,
+      outcome: "updated",
       fields: Object.keys(dto),
+      before,
     });
 
     if (idempotencyKey) {

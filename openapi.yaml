@@ -41,7 +41,55 @@ paths:
                     $ref: "#/components/schemas/IntegrationInvoice"
       responses:
         "200":
-          description: Upsert summary
+          description: Analyze summary with auto-applied inserts and pending conflicts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  batch_id:
+                    type: string
+                  inserted:
+                    type: integer
+                  skipped_unchanged:
+                    type: integer
+                  conflicts:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ImportConflict"
+                  conflicts_pending:
+                    type: integer
+  /integration/invoices/bulk/{batchId}/resolve:
+    post:
+      summary: Resolve pending import conflicts from a bulk batch
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: path
+          name: batchId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decisions]
+              properties:
+                decisions:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/ImportDecision"
+      responses:
+        "200":
+          description: Resolution summary
   /integration/invoices/{invoiceNumber}:
     patch:
       summary: Partial invoice update
@@ -108,6 +156,32 @@ components:
         status:
           type: string
           enum: [open, paid, closed]
+    ImportConflict:
+      type: object
+      properties:
+        import_row_id:
+          type: string
+          format: uuid
+        invoice_number:
+          type: string
+        existing:
+          type: object
+        incoming:
+          type: object
+        changed_fields:
+          type: array
+          items:
+            type: string
+    ImportDecision:
+      type: object
+      required: [import_row_id, resolution]
+      properties:
+        import_row_id:
+          type: string
+          format: uuid
+        resolution:
+          type: string
+          enum: [update, keep, delete_existing]
     IntegrationInvoicePatch:
       type: object
       properties:

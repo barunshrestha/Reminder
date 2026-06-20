@@ -1,3 +1,5 @@
+import type { ImportResolution } from "@prisma/client";
+
 export interface ExtractedService {
   name: string;
   amount?: string;
@@ -34,11 +36,19 @@ export interface ConfirmScanInvoiceInput {
   services?: ExtractedService[];
   clientEmail?: string;
   dateOfService?: string;
+  resolution?: ImportResolution;
+  batchId?: string;
+  importRowId?: string;
 }
 
 export interface ConfirmScanResult {
   scanId: string;
-  invoiceId: string;
   invoiceNumber: string;
-  outcome: "inserted" | "updated" | "skipped";
+  outcome: "inserted" | "updated" | "skipped" | "conflict";
+  invoiceId?: string;
+  batchId?: string;
+  importRowId?: string;
+  existing?: Record<string, unknown>;
+  incoming?: Record<string, unknown>;
+  changedFields?: string[];
 }

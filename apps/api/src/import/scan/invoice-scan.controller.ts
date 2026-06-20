@@ -12,6 +12,7 @@ import {
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor, FilesInterceptor } from "@nestjs/platform-express";
+import { ImportResolution } from "@prisma/client";
 import { CurrentUser } from "../../auth/current-user.decorator";
 import { JwtAuthGuard } from "../../auth/jwt-auth.guard";
 import { InvoiceScanService } from "./invoice-scan.service";
@@ -79,10 +80,11 @@ export class InvoiceScanController {
 
   @Post("confirm")
   async confirmOne(
-    @Body() body: ConfirmScanInvoiceInput,
+    @Body()
+    body: ConfirmScanInvoiceInput & { resolution?: ImportResolution },
     @CurrentUser() user?: { id: string },
   ) {
-    return this.scanService.confirmOne(body, user?.id);
+    return this.scanService.confirmOne(body, user?.id, body.resolution);
   }
 
   @Post("confirm/batch")

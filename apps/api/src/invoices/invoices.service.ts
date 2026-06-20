@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { InvoiceStatus, Prisma } from "@prisma/client";
+import { InvoiceStatus, InvoiceChangeAction, Prisma } from "@prisma/client";
 import { AuditService } from "../audit/audit.service";
+import { InvoiceChangeLogService } from "./invoice-change-log.service";
+import { snapshotFromInvoice } from "./invoice-snapshot.util";
 import { PrismaService } from "../prisma/prisma.service";
 import type { PatchVendorInvoiceDto } from "./dto/patch-invoice.dto";
 
@@ -9,6 +11,7 @@ export class InvoicesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly changeLog: InvoiceChangeLogService,
   ) {}
 
   findAll(params?: { status?: string; send_reminder?: string }) {
@@ -43,8 +46,17 @@ export class InvoicesService {
     return invoice;
   }
 
-  async patch(invoiceNumber: string, dto: PatchVendorInvoiceDto) {
-    await this.findOne(invoiceNumber);
+  listChanges(invoiceNumber: string) {
+    return this.changeLog.listByInvoiceNumber(invoiceNumber);
+  }
+
+  async patch(
+    invoiceNumber: string,
+    dto: PatchVendorInvoiceDto,
+    actorUserId?: string,
+  ) {
+    const existing = await this.findOne(invoiceNumber);
+    const before = snapshotFromInvoice(existing);
     const data: Prisma.InvoiceUpdateInput = {};
     if (dto.send_reminder !== undefined) {
       data.sendReminder = dto.send_reminder;
@@ -71,6 +83,18 @@ export class InvoicesService {
     const updated = await this.prisma.invoice.update({
       where: { invoiceNumber },
       data,
+    });
+
+    await this.changeLog.record({
+      invoiceId: updated.id,
+      invoiceNumber,
+      action: InvoiceChangeAction.updated,
+      before,
+      after: snapshotFromInvoice(updated),
+      context: {
+        source: "manual",
+        actorUserId,
+      },
     });
 
     await this.audit.record("invoice.updated", {

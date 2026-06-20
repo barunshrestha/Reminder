@@ -3,8 +3,12 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { ImportSource, Prisma } from "@prisma/client";
 import { AuditService } from "../audit/audit.service";
+import {
+  ImportAnalyzeService,
+  type AnalyzeRowInput,
+} from "../import/import-analyze.service";
 import {
   InvoiceUpsertService,
   type UpsertInvoiceInput,
@@ -18,6 +22,7 @@ import type { UpdateConnectorDto } from "./dto/update-connector.dto";
 export class ConnectorsService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly analyze: ImportAnalyzeService,
     private readonly upsert: InvoiceUpsertService,
     private readonly audit: AuditService,
   ) {}
@@ -79,19 +84,52 @@ export class ConnectorsService {
       connector.sqlQuery,
     );
 
-    const inputs: UpsertInvoiceInput[] = [];
-    for (const row of rows) {
-      inputs.push(mapConnectorRow(row, columnMap));
+    const analyzeRows: AnalyzeRowInput[] = [];
+    for (let i = 0; i < rows.length; i++) {
+      try {
+        analyzeRows.push({
+          rowNumber: i + 1,
+          rawPayload: rows[i]!,
+          mapped: mapConnectorRow(rows[i]!, columnMap),
+        });
+      } catch (error) {
+        analyzeRows.push({
+          rowNumber: i + 1,
+          rawPayload: rows[i]!,
+          mapped: {
+            clientName: "",
+            invoiceNumber: `__error_${i + 1}`,
+            totalAmount: "0",
+            balanceDue: "0",
+            dueDate: "1970-01-01",
+          },
+          errorMessage:
+            error instanceof Error ? error.message : "Row mapping failed",
+        });
+      }
     }
 
-    const result = await this.upsert.upsertBatch(inputs, { completeSync: true });
+    const batchResult = await this.analyze.analyzeBatch(analyzeRows, {
+      source: ImportSource.connector,
+      connectorId: id,
+      changeSource: "connector",
+    });
+
+    const seen = batchResult.rows
+      .filter((r) => r.status !== "conflict" && r.status !== "error")
+      .map((r) => r.invoiceNumber);
+
+    const finalize = await this.upsert.finalizeSync(seen);
 
     const stats = {
-      inserted: result.inserted,
-      updated: result.updated,
-      skipped_unchanged: result.skippedUnchanged,
-      deactivated: result.deactivated,
-      missed_sync_increments: result.missedSyncIncrements,
+      batch_id: batchResult.batchId,
+      inserted: batchResult.summary.new,
+      updated: 0,
+      skipped_unchanged: batchResult.summary.unchanged,
+      conflicts_pending: batchResult.summary.conflict,
+      errors: batchResult.summary.error + batchResult.summary.duplicate_in_file,
+      deactivated: finalize.deactivated,
+      missed_sync_increments: finalize.missedSyncIncrements,
       rows_fetched: rows.length,
     };
 
@@ -99,7 +137,8 @@ export class ConnectorsService {
       where: { id },
       data: {
         lastSyncAt: new Date(),
-        lastSyncStatus: "completed",
+        lastSyncStatus:
+          batchResult.summary.conflict > 0 ? "pending_review" : "completed",
         lastSyncStats: stats as Prisma.InputJsonValue,
       },
     });

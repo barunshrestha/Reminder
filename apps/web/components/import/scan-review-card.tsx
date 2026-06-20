@@ -14,6 +14,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   type ConfirmScanInvoiceInput,
+  type ConfirmScanResult,
+  type ImportResolution,
   fetchScanImageBlob,
   type ScanExtractionPreview,
 } from "@/lib/api";
@@ -22,7 +24,7 @@ type ScanReviewCardProps = {
   preview: ScanExtractionPreview;
   busy?: boolean;
   confirmed?: boolean;
-  onConfirm: (input: ConfirmScanInvoiceInput) => Promise<void>;
+  onConfirm: (input: ConfirmScanInvoiceInput) => Promise<ConfirmScanResult>;
 };
 
 function confidenceBadge(score?: number) {
@@ -44,6 +46,14 @@ function fieldConfidence(
 ): number | undefined {
   return confidence[key] ?? confidence[key.replace(/([A-Z])/g, "_$1").toLowerCase()];
 }
+
+const FIELD_LABELS: Record<string, string> = {
+  client_name: "Client",
+  total_amount: "Total",
+  balance_due: "Balance due",
+  due_date: "Due date",
+  client_email: "Email",
+};
 
 export function ScanReviewCard({
   preview,
@@ -69,6 +79,7 @@ export function ScanReviewCard({
   const [dateOfService, setDateOfService] = useState(
     extracted.invoiceDate ?? "",
   );
+  const [conflict, setConflict] = useState<ConfirmScanResult | null>(null);
 
   useEffect(() => {
     let objectUrl: string | null = null;
@@ -85,14 +96,14 @@ export function ScanReviewCard({
     };
   }, [preview.scanId]);
 
-  async function handleConfirm() {
+  function buildInput(): ConfirmScanInvoiceInput {
     const services = servicesText
       .split("\n")
       .map((line) => line.trim())
       .filter(Boolean)
       .map((name) => ({ name }));
 
-    await onConfirm({
+    return {
       scanId: preview.scanId,
       invoiceNumber,
       clientName,
@@ -102,7 +113,29 @@ export function ScanReviewCard({
       clientEmail: clientEmail || undefined,
       dateOfService: dateOfService || undefined,
       services: services.length > 0 ? services : undefined,
+    };
+  }
+
+  async function handleConfirm() {
+    const result = await onConfirm(buildInput());
+    if (result.outcome === "conflict") {
+      setConflict(result);
+    }
+  }
+
+  async function handleResolve(resolution: ImportResolution) {
+    if (!conflict?.batchId || !conflict.importRowId) {
+      return;
+    }
+    const result = await onConfirm({
+      ...buildInput(),
+      resolution,
+      batchId: conflict.batchId,
+      importRowId: conflict.importRowId,
     });
+    if (result.outcome !== "conflict") {
+      setConflict(null);
+    }
   }
 
   return (
@@ -134,6 +167,58 @@ export function ScanReviewCard({
         </div>
 
         <div className="space-y-4">
+          {conflict ? (
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-4 space-y-3">
+              <p className="text-sm font-medium">
+                Invoice {conflict.invoiceNumber} already exists with different
+                data.
+              </p>
+              {(conflict.changedFields ?? []).map((field) => (
+                <div key={field} className="text-xs">
+                  <span className="font-medium">
+                    {FIELD_LABELS[field] ?? field}
+                  </span>
+                  <div className="text-muted-foreground">
+                    Existing: {formatValue(conflict.existing?.[field])}
+                  </div>
+                  <div>
+                    Incoming: {formatValue(conflict.incoming?.[field])}
+                  </div>
+                </div>
+              ))}
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => handleResolve("update").catch(console.error)}
+                >
+                  Update existing
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => handleResolve("keep").catch(console.error)}
+                >
+                  Keep existing
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="destructive"
+                  disabled={busy}
+                  onClick={() =>
+                    handleResolve("delete_existing").catch(console.error)
+                  }
+                >
+                  Delete &amp; import
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
           <Field
             label="Invoice number"
             value={invoiceNumber}
@@ -205,7 +290,7 @@ export function ScanReviewCard({
             />
           </div>
 
-          {!confirmed ? (
+          {!confirmed && !conflict ? (
             <Button
               type="button"
               disabled={busy}
@@ -218,6 +303,13 @@ export function ScanReviewCard({
       </CardContent>
     </Card>
   );
+}
+
+function formatValue(value: unknown): string {
+  if (value == null) {
+    return "—";
+  }
+  return String(value);
 }
 
 function Field({

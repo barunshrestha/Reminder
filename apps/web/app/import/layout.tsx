@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 const tabs = [
   { href: "/import", label: "Spreadsheet", exact: true },
   { href: "/import/scan", label: "Scan invoice", exact: false },
+  { href: "/import/conflicts", label: "Conflicts", exact: false },
 ];
 
 export default function ImportLayout({

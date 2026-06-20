@@ -93,12 +93,14 @@ export class InvoiceScanUploadService {
     uploadId: string,
     invoiceId: string,
     invoiceNumber: string,
+    importRowId?: string,
   ): Promise<void> {
     await this.prisma.invoiceScanUploadInvoice.create({
       data: {
         uploadId,
         invoiceId,
         invoiceNumber,
+        importRowId: importRowId ?? null,
       },
     });
   }

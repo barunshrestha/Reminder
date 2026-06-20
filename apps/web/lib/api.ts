@@ -133,11 +133,69 @@ export type SpreadsheetPreview = {
 
 export type ImportSpreadsheetResult = {
   uploadId: string;
+  batchId: string;
   inserted: number;
   updated: number;
   skippedUnchanged: number;
+  conflicts: number;
   deleted: number;
-  errors: Array<{ row: number; field: string; message: string }>;
+  errors: Array<{ row: number; field?: string; message: string }>;
+  needsReview: boolean;
+};
+
+export type ImportRowResult = {
+  importRowId: string;
+  rowNumber: number;
+  invoiceNumber: string;
+  status: string;
+  existing?: Record<string, unknown>;
+  incoming: Record<string, unknown>;
+  changedFields: string[];
+  invoiceId?: string;
+  errorMessage?: string;
+};
+
+export type AnalyzeSpreadsheetResult = {
+  uploadId: string;
+  batchId: string;
+  status: string;
+  summary: {
+    new: number;
+    unchanged: number;
+    conflict: number;
+    duplicate_in_file: number;
+    error: number;
+    imported: number;
+  };
+  rows: ImportRowResult[];
+  errors: Array<{ row: number; field?: string; message: string }>;
+};
+
+export type ImportResolution = "update" | "keep" | "delete_existing";
+
+export type PendingImportBatch = {
+  id: string;
+  source: string;
+  status: string;
+  createdAt: string;
+  stats: Record<string, unknown> | null;
+  connector?: { id: string; name: string } | null;
+  spreadsheetUpload?: { id: string; originalFilename: string } | null;
+  scanUpload?: { id: string; originalFilename: string } | null;
+  _count?: { rows: number };
+};
+
+export type ImportBatchDetail = PendingImportBatch & {
+  rows: Array<{
+    id: string;
+    rowNumber: number;
+    invoiceNumber: string;
+    status: string;
+    existingSnapshot: Record<string, unknown> | null;
+    mappedPayload: Record<string, unknown>;
+    changedFields: string[];
+    errorMessage: string | null;
+  }>;
 };
 
 export async function listMappingProfiles() {
@@ -208,6 +266,56 @@ export async function previewSpreadsheet(
   return parseResponse<SpreadsheetPreview>(res);
 }
 
+export async function analyzeSpreadsheet(
+  file: File,
+  options: {
+    mappingProfileId: string;
+    columnMap?: Record<string, string>;
+    override?: boolean;
+  },
+) {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("mappingProfileId", options.mappingProfileId);
+  if (options.columnMap) {
+    form.append("columnMap", JSON.stringify(options.columnMap));
+  }
+  if (options.override) {
+    form.append("override", "true");
+  }
+  const res = await fetch(`${API_BASE}/import/spreadsheet/analyze`, {
+    method: "POST",
+    credentials: "include",
+    body: form,
+  });
+  return parseResponse<AnalyzeSpreadsheetResult>(res);
+}
+
+export async function commitImportBatch(
+  batchId: string,
+  decisions: Array<{ importRowId: string; resolution: ImportResolution }>,
+) {
+  return api<{
+    batchId: string;
+    updated: number;
+    skipped: number;
+    deleted: number;
+    inserted: number;
+    errors: Array<{ importRowId: string; message: string }>;
+  }>(`/import/batches/${batchId}/commit`, {
+    method: "POST",
+    body: JSON.stringify({ decisions }),
+  });
+}
+
+export async function listPendingImportBatches() {
+  return api<PendingImportBatch[]>("/import/batches/pending");
+}
+
+export async function getImportBatch(batchId: string) {
+  return api<ImportBatchDetail>(`/import/batches/${batchId}`);
+}
+
 export async function importSpreadsheet(
   file: File,
   options: {
@@ -273,13 +381,21 @@ export type ConfirmScanInvoiceInput = {
   services?: ExtractedService[];
   clientEmail?: string;
   dateOfService?: string;
+  resolution?: ImportResolution;
+  batchId?: string;
+  importRowId?: string;
 };
 
 export type ConfirmScanResult = {
   scanId: string;
-  invoiceId: string;
   invoiceNumber: string;
-  outcome: "inserted" | "updated" | "skipped";
+  outcome: "inserted" | "updated" | "skipped" | "conflict";
+  invoiceId?: string;
+  batchId?: string;
+  importRowId?: string;
+  existing?: Record<string, unknown>;
+  incoming?: Record<string, unknown>;
+  changedFields?: string[];
 };
 
 export type InvoiceScanUploadItem = {

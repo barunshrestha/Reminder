@@ -205,6 +205,7 @@ function mapConnectorRow(
     dueDate: canonical.due_date.slice(0, 10),
     dateOfService: canonical.date_of_service?.slice(0, 10) ?? null,
     clientEmail: canonical.client_email ?? null,
+    clientPhone: canonical.client_phone ?? null,
     externalClientId: canonical.external_client_id ?? null,
     comments: canonical.comments ?? null,
     sendReminder: canonical.send_reminder !== "false",

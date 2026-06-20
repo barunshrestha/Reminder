@@ -40,6 +40,10 @@ export class IntegrationInvoiceDto {
 
   @IsOptional()
   @IsString()
+  client_phone?: string;
+
+  @IsOptional()
+  @IsString()
   external_client_id?: string;
 
   @IsOptional()

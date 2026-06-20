@@ -32,6 +32,7 @@ export function buildCanonicalPayload(input: ContentHashInput): Record<string, u
     date_of_service: input.dateOfService?.slice(0, 10) ?? null,
     services: normalizeServices(input.services),
     client_email: input.clientEmail ?? null,
+    client_phone: input.clientPhone ?? null,
     comments: input.comments ?? null,
     status: input.status,
     email_opt_out: input.emailOptOut,

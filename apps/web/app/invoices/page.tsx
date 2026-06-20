@@ -24,6 +24,7 @@ type Invoice = {
   sendReminder: boolean;
   emailOptOut: boolean;
   clientEmail?: string | null;
+  clientPhone?: string | null;
   notificationNumber: number;
   reminderDeliveryMode: "email" | "document_only";
   lastTierSent?: number | null;
@@ -110,8 +111,7 @@ export default function InvoicesPage() {
                     </TableCell>
                     <TableCell>{inv.clientName}</TableCell>
                     <TableCell>{inv.clientEmail || "—"}</TableCell>
-                    <TableCell>—</TableCell>
-                    <TableCell>{inv.balanceDue}</TableCell>
+                    <TableCell>{inv.clientPhone || "—"}</TableCell>
                     <TableCell>{formatDate(inv.dueDate)}</TableCell>
                     <TableCell>{formatStatus(inv.status)}</TableCell>
                     <TableCell>{inv.notificationNumber}</TableCell>

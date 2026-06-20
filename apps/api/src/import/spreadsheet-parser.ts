@@ -103,6 +103,7 @@ export const CANONICAL_IMPORT_FIELDS = [
   "balance_due",
   "due_date",
   "client_email",
+  "client_phone",
   "external_client_id",
   "date_of_service",
   "comments",

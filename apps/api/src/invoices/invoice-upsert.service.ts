@@ -29,6 +29,7 @@ export interface UpsertInvoiceInput {
   dateOfService?: string | null;
   services?: Array<string | { name: string; amount?: string }>;
   clientEmail?: string | null;
+  clientPhone?: string | null;
   comments?: string | null;
   sendReminder?: boolean;
   externalClientId?: string | null;
@@ -62,6 +63,7 @@ export class InvoiceUpsertService {
       dateOfService: input.dateOfService ?? null,
       services: input.services,
       clientEmail: input.clientEmail ?? null,
+      clientPhone: input.clientPhone ?? null,
       comments: input.comments ?? null,
       externalClientId: input.externalClientId ?? null,
       status,
@@ -320,6 +322,7 @@ export class InvoiceUpsertService {
         : null,
       services: input.services ?? undefined,
       clientEmail: input.clientEmail ?? null,
+      clientPhone: input.clientPhone ?? null,
       comments: input.comments ?? null,
       sendReminder: input.sendReminder ?? true,
       externalClientId: input.externalClientId ?? null,

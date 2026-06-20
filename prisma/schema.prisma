@@ -154,6 +154,7 @@ model Invoice {
   services              Json?
   notificationNumber    Int                  @default(0) @map("notification_number")
   clientEmail           String?              @map("client_email")
+  clientPhone           String?              @map("client_phone")
   comments              String?
   sendReminder          Boolean              @default(true) @map("send_reminder")
   externalClientId      String?              @map("external_client_id")

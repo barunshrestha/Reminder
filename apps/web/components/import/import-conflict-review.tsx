@@ -26,6 +26,7 @@ const FIELD_LABELS: Record<string, string> = {
   due_date: "Due date",
   date_of_service: "Date of service",
   client_email: "Email",
+  client_phone: "Phone",
   comments: "Comments",
   send_reminder: "Send reminder",
   external_client_id: "External client ID",

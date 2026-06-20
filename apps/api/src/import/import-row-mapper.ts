@@ -15,6 +15,7 @@ export interface MappedInvoiceRow {
   balanceDue: string;
   dueDate: string;
   clientEmail?: string;
+  clientPhone?: string;
   externalClientId?: string;
   dateOfService?: string;
   comments?: string;
@@ -125,6 +126,7 @@ export function mapSpreadsheetRow(
       balanceDue,
       dueDate,
       clientEmail: canonical.client_email || undefined,
+      clientPhone: canonical.client_phone || undefined,
       externalClientId: canonical.external_client_id || undefined,
       dateOfService: normalizeDate(canonical.date_of_service),
       comments: canonical.comments || undefined,

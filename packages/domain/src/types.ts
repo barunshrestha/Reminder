@@ -11,6 +11,7 @@ export interface InvoiceRecord {
   dateOfService?: string | null;
   services?: Array<string | { name: string; amount?: string }>;
   clientEmail?: string | null;
+  clientPhone?: string | null;
   comments?: string | null;
   sendReminder: boolean;
   externalClientId?: string | null;
@@ -32,6 +33,7 @@ export interface ContentHashInput {
   dateOfService?: string | null;
   services?: Array<string | { name: string; amount?: string }>;
   clientEmail?: string | null;
+  clientPhone?: string | null;
   comments?: string | null;
   status: InvoiceStatus;
   emailOptOut: boolean;

@@ -70,6 +70,9 @@ export class InvoicesService {
     if (dto.client_email !== undefined) {
       data.clientEmail = dto.client_email;
     }
+    if (dto.client_phone !== undefined) {
+      data.clientPhone = dto.client_phone;
+    }
     if (dto.reminder_delivery_mode !== undefined) {
       data.reminderDeliveryMode = dto.reminder_delivery_mode;
     }

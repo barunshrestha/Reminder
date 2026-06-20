@@ -229,6 +229,7 @@ export class ImportCommitService {
         : null,
       services: payload.services as UpsertInvoiceInput["services"],
       clientEmail: payload.client_email ? String(payload.client_email) : null,
+      clientPhone: payload.client_phone ? String(payload.client_phone) : null,
       comments: payload.comments ? String(payload.comments) : null,
       sendReminder: Boolean(payload.send_reminder ?? true),
       externalClientId: payload.external_client_id

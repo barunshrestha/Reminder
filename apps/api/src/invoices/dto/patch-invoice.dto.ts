@@ -3,6 +3,7 @@ import {
   IsEmail,
   IsEnum,
   IsOptional,
+  IsString,
 } from "class-validator";
 
 export class PatchVendorInvoiceDto {
@@ -21,6 +22,10 @@ export class PatchVendorInvoiceDto {
   @IsOptional()
   @IsEmail()
   client_email?: string;
+
+  @IsOptional()
+  @IsString()
+  client_phone?: string;
 
   @IsOptional()
   @IsEnum(["email", "document_only"])

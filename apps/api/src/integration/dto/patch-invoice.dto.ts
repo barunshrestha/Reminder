@@ -29,6 +29,10 @@ export class PatchIntegrationInvoiceDto {
   client_email?: string;
 
   @IsOptional()
+  @IsString()
+  client_phone?: string;
+
+  @IsOptional()
   @IsBoolean()
   send_reminder?: boolean;
 

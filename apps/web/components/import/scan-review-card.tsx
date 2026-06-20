@@ -53,6 +53,7 @@ const FIELD_LABELS: Record<string, string> = {
   balance_due: "Balance due",
   due_date: "Due date",
   client_email: "Email",
+  client_phone: "Phone",
 };
 
 export function ScanReviewCard({

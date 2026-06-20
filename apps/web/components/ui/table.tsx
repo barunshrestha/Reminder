@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
-    <div className="relative w-full overflow-auto">
+    <div className="relative w-full overflow-x-auto">
       <table
         className={cn("w-full caption-bottom text-sm", className)}
         {...props}
@@ -15,7 +15,7 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
 
 function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
   return (
-    <thead className={cn("[&_tr]:border-b", className)} {...props} />
+    <thead className={cn("border-b border-stroke dark:border-strokedark", className)} {...props} />
   );
 }
 
@@ -41,7 +41,7 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
   return (
     <tr
       className={cn(
-        "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted",
+        "border-b border-stroke transition-colors hover:bg-gray-3 dark:border-strokedark dark:hover:bg-meta-4",
         className,
       )}
       {...props}
@@ -53,7 +53,7 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
   return (
     <th
       className={cn(
-        "h-10 px-2 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0",
+        "px-4 py-3 text-left align-middle font-medium text-bodydark2 [&:has([role=checkbox])]:pr-0",
         className,
       )}
       {...props}
@@ -64,7 +64,7 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
 function TableCell({ className, ...props }: React.ComponentProps<"td">) {
   return (
     <td
-      className={cn("p-2 align-middle [&:has([role=checkbox])]:pr-0", className)}
+      className={cn("px-4 py-3 align-middle [&:has([role=checkbox])]:pr-0", className)}
       {...props}
     />
   );

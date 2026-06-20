@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { me } from "@/lib/api";
-import { Nav } from "./nav";
+import { DefaultLayout } from "@/layout/DefaultLayout";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function AppShell({
@@ -12,32 +12,24 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const [user, setUser] = useState<{ email: string; role: string } | null>(
-    null,
-  );
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     me()
-      .then((r) => setUser(r.user))
+      .then(() => undefined)
       .catch(() => router.replace("/login"))
       .finally(() => setLoading(false));
   }, [router]);
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-6xl space-y-4 p-6">
-        <Skeleton className="h-10 w-full" />
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-40 w-full" />
+      <div className="space-y-4 p-6">
+        <Skeleton className="h-12 w-full rounded-sm" />
+        <Skeleton className="h-9 w-48 rounded-sm" />
+        <Skeleton className="h-40 w-full rounded-sm" />
       </div>
     );
   }
 
-  return (
-    <>
-      <Nav user={user ?? undefined} />
-      <main className="mx-auto max-w-6xl space-y-4 p-6">{children}</main>
-    </>
-  );
+  return <DefaultLayout>{children}</DefaultLayout>;
 }

@@ -188,12 +188,15 @@ function mapConnectorRow(
     }
   }
 
-  const mode = canonical.reminder_delivery_mode === "document_only"
-    ? "document_only"
-    : "email";
+  const mode = parseConnectorDeliveryMode(canonical.reminder_delivery_mode);
   if (mode === "email" && !canonical.client_email) {
     throw new BadRequestException(
       `client_email required for invoice ${canonical.invoice_number}`,
+    );
+  }
+  if (mode === "phone" && !canonical.client_phone) {
+    throw new BadRequestException(
+      `client_phone required for invoice ${canonical.invoice_number}`,
     );
   }
 
@@ -217,4 +220,20 @@ function mapConnectorRow(
         ? canonical.status
         : undefined,
   };
+}
+
+function parseConnectorDeliveryMode(
+  value?: string,
+): "email" | "phone" | "document_only" | "na" {
+  const normalized = (value ?? "email").toLowerCase().replace(/[\s-]+/g, "_");
+  if (normalized === "document_only" || normalized === "document") {
+    return "document_only";
+  }
+  if (normalized === "phone") {
+    return "phone";
+  }
+  if (normalized === "na" || normalized === "n_a") {
+    return "na";
+  }
+  return "email";
 }

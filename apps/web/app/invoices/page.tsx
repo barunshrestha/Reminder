@@ -26,12 +26,19 @@ type Invoice = {
   clientEmail?: string | null;
   clientPhone?: string | null;
   notificationNumber: number;
-  reminderDeliveryMode: "email" | "document_only";
+  reminderDeliveryMode: "email" | "phone" | "document_only" | "na";
   lastTierSent?: number | null;
   lastReminderSentAt?: string | null;
   paidAt?: string | null;
   comments?: string | null;
 };
+
+const DELIVERY_MODE_OPTIONS = [
+  { value: "email", label: "Email" },
+  { value: "phone", label: "Phone" },
+  { value: "document_only", label: "Document Only" },
+  { value: "na", label: "N/A" },
+] as const;
 
 const STATUS_OPTIONS = ["open", "paid", "closed"] as const;
 
@@ -45,10 +52,6 @@ function formatDateTime(value?: string | null) {
   return new Date(value).toLocaleString();
 }
 
-function formatDeliveryMode(mode: Invoice["reminderDeliveryMode"]) {
-  return mode === "document_only" ? "Document only" : "Email";
-}
-
 function formatStatus(status: string) {
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
@@ -59,6 +62,26 @@ export default function InvoicesPage() {
   useEffect(() => {
     api<Invoice[]>("/invoices?status=open").then(setInvoices).catch(console.error);
   }, []);
+
+  async function updateDeliveryMode(
+    invoiceNumber: string,
+    reminderDeliveryMode: Invoice["reminderDeliveryMode"],
+  ) {
+    const updated = await api<Invoice>(
+      `/invoices/${encodeURIComponent(invoiceNumber)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ reminder_delivery_mode: reminderDeliveryMode }),
+      },
+    );
+    setInvoices((list) =>
+      list.map((i) =>
+        i.invoiceNumber === invoiceNumber
+          ? { ...i, reminderDeliveryMode: updated.reminderDeliveryMode }
+          : i,
+      ),
+    );
+  }
 
   async function updateStatus(invoiceNumber: string, status: string) {
     const updated = await api<Invoice>(
@@ -153,7 +176,22 @@ export default function InvoicesPage() {
                     </TableCell>
                     <TableCell>{inv.notificationNumber}</TableCell>
                     <TableCell>
-                      {formatDeliveryMode(inv.reminderDeliveryMode)}
+                      <select
+                        value={inv.reminderDeliveryMode}
+                        onChange={(e) =>
+                          void updateDeliveryMode(
+                            inv.invoiceNumber,
+                            e.target.value as Invoice["reminderDeliveryMode"],
+                          )
+                        }
+                        className="w-full min-w-[8rem] rounded border border-stroke bg-transparent px-2 py-1 text-sm text-black outline-none focus:border-primary dark:border-form-strokedark dark:bg-form-input dark:text-white"
+                      >
+                        {DELIVERY_MODE_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
                     </TableCell>
                     <TableCell>
                       {inv.lastTierSent ?? "—"}

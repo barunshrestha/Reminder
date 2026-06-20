@@ -16,9 +16,11 @@ const navItems = [
 
 export function Sidebar({
   open,
+  collapsed,
   onClose,
 }: {
   open: boolean;
+  collapsed: boolean;
   onClose: () => void;
 }) {
   const pathname = usePathname();
@@ -27,7 +29,8 @@ export function Sidebar({
     <>
       <aside
         className={cn(
-          "fixed left-0 top-0 z-9999 flex h-screen w-72 flex-col overflow-y-hidden bg-black duration-300 ease-linear lg:translate-x-0",
+          "fixed left-0 top-0 z-9999 flex h-screen w-72 flex-col overflow-y-hidden bg-black duration-300 ease-linear",
+          collapsed ? "-translate-x-full lg:-translate-x-full" : "lg:translate-x-0",
           open ? "translate-x-0" : "-translate-x-full",
         )}
       >

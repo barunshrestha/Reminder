@@ -115,11 +115,33 @@ function draftValue(invoice: Invoice, field: EditTarget["field"]) {
     case "balanceDue":
       return invoice.balanceDue;
     case "dueDate":
-      return formatDueDate(invoice.dueDate) === "—"
-        ? ""
-        : formatDueDate(invoice.dueDate);
+      return invoice.dueDate?.slice(0, 10) ?? "";
     default:
       return invoice[field] ?? "";
+  }
+}
+
+function hasDraftChanged(
+  invoice: Invoice,
+  field: EditTarget["field"],
+  draft: string,
+) {
+  switch (field) {
+    case "balanceDue": {
+      const parsed = parseAmountInput(draft);
+      if (!parsed) {
+        return draft.trim() !== invoice.balanceDue;
+      }
+      return parsed !== Number.parseFloat(invoice.balanceDue).toFixed(2);
+    }
+    case "dueDate": {
+      const iso = parseDueDateInput(draft) ?? draft.trim();
+      return iso !== invoice.dueDate.slice(0, 10);
+    }
+    case "comments":
+      return draft !== (invoice.comments ?? "");
+    default:
+      return draft.trim() !== String(invoice[field] ?? "").trim();
   }
 }
 
@@ -168,6 +190,17 @@ export default function InvoicesPage() {
     if (!editTarget) {
       return;
     }
+    const invoice = invoices.find(
+      (item) => item.invoiceNumber === editTarget.invoiceNumber,
+    );
+    if (!invoice) {
+      cancelEdit();
+      return;
+    }
+    if (!hasDraftChanged(invoice, editTarget.field, draft)) {
+      cancelEdit();
+      return;
+    }
     try {
       if (editTarget.field === "clientEmail" && draft.trim()) {
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.trim())) {
@@ -195,12 +228,35 @@ export default function InvoicesPage() {
       editTarget.field === field;
 
     if (isEditing) {
+      if (field === "dueDate") {
+        return (
+          <Input
+            autoFocus
+            type="date"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={() => {
+              void commitEdit();
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void commitEdit();
+              }
+              if (event.key === "Escape") {
+                cancelEdit();
+              }
+            }}
+            className={cellInputClass}
+          />
+        );
+      }
+
       return (
         <Input
           autoFocus
-          type={field === "balanceDue" ? "text" : field === "dueDate" ? "text" : "text"}
+          type={field === "balanceDue" ? "text" : "text"}
           inputMode={field === "balanceDue" ? "decimal" : undefined}
-          placeholder={field === "dueDate" ? "mm/dd/yyyy" : undefined}
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           onBlur={() => {

@@ -1,5 +1,6 @@
 import {
   IsBoolean,
+  IsDateString,
   IsEmail,
   IsEnum,
   IsInt,
@@ -20,7 +21,7 @@ export class PatchVendorInvoiceDto {
   balance_due?: string;
 
   @IsOptional()
-  @IsString()
+  @IsDateString()
   due_date?: string;
 
   @IsOptional()

@@ -1,20 +1,37 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Header } from "@/components/Header/header";
 import { Sidebar } from "@/components/Sidebar/sidebar";
+import { cn } from "@/lib/utils";
 
 export function DefaultLayout({ children }: { children: React.ReactNode }) {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarVisible, setSidebarVisible] = useState(false);
+
+  useEffect(() => {
+    setSidebarVisible(window.matchMedia("(min-width: 1024px)").matches);
+  }, []);
+
+  function toggleSidebar() {
+    setSidebarVisible((visible) => !visible);
+  }
 
   return (
     <div className="min-h-screen bg-whiten dark:bg-boxdark-2">
       <Sidebar
-        open={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
+        visible={sidebarVisible}
+        onToggle={toggleSidebar}
       />
-      <div className="relative flex flex-1 flex-col lg:ml-72">
-        <Header onMenuClick={() => setSidebarOpen(true)} />
+      <div
+        className={cn(
+          "relative flex min-h-screen flex-1 flex-col transition-[margin] duration-300 ease-linear",
+          sidebarVisible ? "lg:ml-72" : "lg:ml-0",
+        )}
+      >
+        <Header
+          sidebarVisible={sidebarVisible}
+          onToggleSidebar={toggleSidebar}
+        />
         <main className="px-4 pb-18 pt-24 md:px-6 2xl:px-10">
           <div className="mx-auto w-full max-w-screen-2xl">{children}</div>
         </main>

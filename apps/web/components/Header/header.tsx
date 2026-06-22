@@ -3,8 +3,16 @@
 import { useEffect, useState } from "react";
 import { logout, me } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { HamburgerButton } from "@/components/ui/hamburger-button";
+import { cn } from "@/lib/utils";
 
-export function Header({ onMenuClick }: { onMenuClick: () => void }) {
+export function Header({
+  sidebarVisible,
+  onToggleSidebar,
+}: {
+  sidebarVisible: boolean;
+  onToggleSidebar: () => void;
+}) {
   const [userEmail, setUserEmail] = useState("");
   const [userRole, setUserRole] = useState("");
   const [isDark, setIsDark] = useState(false);
@@ -34,25 +42,30 @@ export function Header({ onMenuClick }: { onMenuClick: () => void }) {
   }
 
   return (
-    <header className="fixed left-0 right-0 top-0 z-999 flex w-full border-b border-stroke bg-white shadow-1 dark:border-strokedark dark:bg-boxdark lg:left-72">
-      <div className="flex w-full items-center justify-between px-4 py-4 md:px-6 2xl:px-10">
-        <div className="flex items-center gap-2 sm:gap-4 lg:hidden">
-          <button
-            type="button"
-            onClick={onMenuClick}
-            className="rounded-sm border border-stroke p-1.5 shadow-sm dark:border-strokedark"
-            aria-label="Open menu"
-          >
-            ☰
-          </button>
-        </div>
+    <header
+      className={cn(
+        "fixed top-0 z-999 border-b border-stroke bg-white shadow-1 dark:border-strokedark dark:bg-boxdark",
+        sidebarVisible ? "left-0 right-0 lg:left-72" : "left-0 right-0",
+      )}
+    >
+      <div className="flex items-center justify-between gap-3 px-4 py-3 md:px-6 2xl:px-10">
+        <HamburgerButton
+          onClick={onToggleSidebar}
+          label={sidebarVisible ? "Hide sidebar" : "Show sidebar"}
+        />
 
-        <div className="ml-auto flex items-center gap-3">
-          <Button type="button" variant="outline" size="sm" onClick={toggleTheme}>
+        <div className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            onClick={toggleTheme}
+          >
             {isDark ? "Light" : "Dark"}
           </Button>
-          <div className="hidden text-right sm:block">
-            <span className="block text-sm font-medium text-black dark:text-white">
+          <div className="hidden max-w-[10rem] truncate text-right sm:block md:max-w-[12rem]">
+            <span className="block truncate text-sm font-medium text-black dark:text-white">
               {userEmail || "User"}
             </span>
             <span className="block text-xs text-bodydark2">{userRole || "—"}</span>
@@ -60,6 +73,7 @@ export function Header({ onMenuClick }: { onMenuClick: () => void }) {
           <Button
             type="button"
             size="sm"
+            className="shrink-0 whitespace-nowrap"
             onClick={() => {
               void logout().then(() => {
                 window.location.href = "/login";

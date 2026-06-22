@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { HamburgerButton } from "@/components/ui/hamburger-button";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -15,34 +16,37 @@ const navItems = [
 ];
 
 export function Sidebar({
-  open,
-  onClose,
+  visible,
+  onToggle,
 }: {
-  open: boolean;
-  onClose: () => void;
+  visible: boolean;
+  onToggle: () => void;
 }) {
   const pathname = usePathname();
+
+  function closeOnMobileNavigate() {
+    if (window.innerWidth < 1024) {
+      onToggle();
+    }
+  }
 
   return (
     <>
       <aside
         className={cn(
-          "fixed left-0 top-0 z-9999 flex h-screen w-72 flex-col overflow-y-hidden bg-black duration-300 ease-linear lg:translate-x-0",
-          open ? "translate-x-0" : "-translate-x-full",
+          "fixed left-0 top-0 z-9999 flex h-screen w-72 flex-col overflow-y-hidden bg-black duration-300 ease-linear",
+          visible ? "translate-x-0" : "-translate-x-full",
         )}
       >
         <div className="flex items-center justify-between gap-2 px-7.5 py-5.5">
           <Link href="/dashboard" className="text-title-sm font-bold text-white">
             Payment Reminder
           </Link>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-bodydark2 lg:hidden"
-            aria-label="Close menu"
-          >
-            ✕
-          </button>
+          <HamburgerButton
+            onClick={onToggle}
+            label="Hide sidebar"
+            className="border-strokedark bg-black hover:bg-graydark dark:hover:bg-meta-4"
+          />
         </div>
 
         <div className="no-scrollbar flex flex-col overflow-y-auto duration-300 ease-linear">
@@ -57,7 +61,7 @@ export function Sidebar({
                   <li key={item.href}>
                     <Link
                       href={item.href}
-                      onClick={onClose}
+                      onClick={closeOnMobileNavigate}
                       className={cn(
                         "group relative flex items-center gap-2.5 rounded-sm px-4 py-2 font-medium text-bodydark1 duration-300 ease-in-out hover:bg-graydark dark:hover:bg-meta-4",
                         active && "bg-graydark text-white dark:bg-meta-4",
@@ -73,10 +77,11 @@ export function Sidebar({
         </div>
       </aside>
 
-      {open ? (
+      {visible ? (
         <div
           className="fixed inset-0 z-999 bg-black/80 lg:hidden"
-          onClick={onClose}
+          onClick={onToggle}
+          aria-hidden="true"
         />
       ) : null}
     </>

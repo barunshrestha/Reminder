@@ -31,10 +31,15 @@ async function main() {
     where: { id: "default" },
     create: {
       id: "default",
-      vendorName: "Demo Vendor",
+      vendorName: "Tarema LLC",
+      fromName: "Tarema LLC",
+      fromEmail: "taremamllc@gmail.com",
       vendorPhysicalAddress: "123 Main Street, Springfield, ST 00000",
     },
-    update: {},
+    update: {
+      fromName: "Tarema LLC",
+      fromEmail: "taremamllc@gmail.com",
+    },
   });
 
   await prisma.mappingProfile.upsert({

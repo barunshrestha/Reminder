@@ -11,6 +11,7 @@ import {
 } from "@payment-reminder/email-templates";
 import type { PrismaClient } from "@prisma/client";
 import type { EmailSender } from "./email-sender";
+import { buildUnsubscribeUrl } from "./email-sender";
 import { ensureStorageRoot, generateNotificationDocument } from "./document-generator";
 import { sendVendorDigest } from "./vendor-digest";
 
@@ -177,6 +178,17 @@ export class ReminderRunExecutor {
           continue;
         }
 
+        if (invoice.reminderDeliveryMode === "phone") {
+          stats.skippedIneligible++;
+          await this.audit("sms.not_implemented", {
+            runId: run.id,
+            invoiceNumber: invoice.invoiceNumber,
+            tier: nextTier,
+            message: "SMS delivery is not enabled yet",
+          });
+          continue;
+        }
+
         const templateData: ReminderTemplateData = {
           clientName: invoice.clientName,
           invoiceNumber: invoice.invoiceNumber,
@@ -193,19 +205,38 @@ export class ReminderRunExecutor {
           includeComments: vendor.includeCommentsInEmail,
           vendorName: vendor.vendorName ?? undefined,
           vendorPhysicalAddress: vendor.vendorPhysicalAddress,
-          unsubscribeUrl: `https://localhost/api/v1/unsubscribe?invoice=${invoice.invoiceNumber}`,
+          unsubscribeUrl: buildUnsubscribeUrl(invoice.invoiceNumber),
         };
 
         const templateOverride = templateMap.get(nextTier);
+        const fromEmail =
+          vendor.fromEmail ?? process.env.EMAIL_DEFAULT_FROM ?? undefined;
+        const emailConfigured =
+          Boolean(fromEmail) && Boolean(vendor.vendorPhysicalAddress?.trim());
 
         try {
           if (invoice.reminderDeliveryMode === "email") {
+            if (!emailConfigured) {
+              stats.skippedIneligible++;
+              await this.audit("email.skipped.misconfigured", {
+                runId: run.id,
+                invoiceNumber: invoice.invoiceNumber,
+                tier: nextTier,
+                message: "from email and physical address required",
+              });
+              continue;
+            }
             await this.sendEmailReminder(
               invoice.id,
               invoice.clientEmail!,
               nextTier,
               templateData,
               run.id,
+              {
+                fromEmail: fromEmail!,
+                fromName: vendor.fromName ?? vendor.vendorName ?? undefined,
+                replyTo: vendor.replyToEmail ?? undefined,
+              },
               templateOverride,
             );
             stats.emailsSent++;
@@ -316,6 +347,11 @@ export class ReminderRunExecutor {
     tier: number,
     data: ReminderTemplateData,
     runId: string,
+    senderIdentity: {
+      fromEmail: string;
+      fromName?: string;
+      replyTo?: string;
+    },
     templateOverride?: MilestoneTemplateContent,
   ): Promise<void> {
     const { subject, html, text, templateId } = renderReminderEmail(
@@ -328,6 +364,11 @@ export class ReminderRunExecutor {
       subject,
       html,
       text,
+      from: {
+        email: senderIdentity.fromEmail,
+        name: senderIdentity.fromName,
+      },
+      replyTo: senderIdentity.replyTo,
       headers: {
         "List-Unsubscribe": `<${data.unsubscribeUrl}>`,
       },

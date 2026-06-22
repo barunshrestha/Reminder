@@ -5,13 +5,17 @@ import Link from "next/link";
 import {
   getReminderConfig,
   getReminderTemplates,
+  getVendorSettings,
   previewReminderTemplate,
   resetReminderTemplate,
+  sendTestVendorEmail,
   type ReminderConfig,
   type ReminderTemplateItem,
   type ReminderTemplatesResponse,
   updateReminderTemplate,
   updateReminderConfig,
+  updateVendorSettings,
+  type VendorSettings,
 } from "@/lib/api";
 import { api } from "@/lib/api";
 import { AppShell } from "@/components/app-shell";
@@ -36,12 +40,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-type VendorSettings = {
-  timezone: string;
-  vendorName: string | null;
-  vendorPhysicalAddress: string | null;
-  digestEmailEnabled: boolean;
-};
+type VendorSettings = import("@/lib/api").VendorSettings;
 
 const WEEKDAYS = [
   { value: "0", label: "Sunday" },
@@ -69,6 +68,9 @@ export default function SettingsPage() {
   );
   const [customTierInput, setCustomTierInput] = useState("");
   const [savedGeneral, setSavedGeneral] = useState(false);
+  const [savedEmailDelivery, setSavedEmailDelivery] = useState(false);
+  const [testingEmail, setTestingEmail] = useState(false);
+  const [testEmailMessage, setTestEmailMessage] = useState("");
   const [savedReminders, setSavedReminders] = useState(false);
   const [savedMilestones, setSavedMilestones] = useState(false);
   const [milestoneBaseline, setMilestoneBaseline] = useState("");
@@ -90,7 +92,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     Promise.all([
-      api<VendorSettings>("/vendor-settings"),
+      getVendorSettings(),
       getReminderConfig(),
       getReminderTemplates(),
     ])
@@ -157,16 +159,48 @@ export default function SettingsPage() {
       return;
     }
     setError("");
-    await api("/vendor-settings", {
-      method: "PATCH",
-      body: JSON.stringify({
-        timezone: vendorSettings.timezone,
-        vendor_name: vendorSettings.vendorName,
-        vendor_physical_address: vendorSettings.vendorPhysicalAddress,
-        digest_email_enabled: vendorSettings.digestEmailEnabled,
-      }),
+    await updateVendorSettings({
+      timezone: vendorSettings.timezone,
+      vendor_name: vendorSettings.vendorName,
+      vendor_physical_address: vendorSettings.vendorPhysicalAddress,
+      digest_email_enabled: vendorSettings.digestEmailEnabled,
     });
     setSavedGeneral(true);
+  }
+
+  async function saveEmailDelivery(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!vendorSettings) {
+      return;
+    }
+    setError("");
+    setTestEmailMessage("");
+    const updated = await updateVendorSettings({
+      from_email: vendorSettings.fromEmail,
+      from_name: vendorSettings.fromName,
+      reply_to_email: vendorSettings.replyToEmail,
+    });
+    setVendorSettings(updated);
+    setSavedEmailDelivery(true);
+  }
+
+  async function onSendTestEmail() {
+    if (!vendorSettings) {
+      return;
+    }
+    setTestingEmail(true);
+    setTestEmailMessage("");
+    setError("");
+    try {
+      const result = await sendTestVendorEmail();
+      setTestEmailMessage(`Test email sent to ${result.to}.`);
+      const refreshed = await getVendorSettings();
+      setVendorSettings(refreshed);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Test email failed");
+    } finally {
+      setTestingEmail(false);
+    }
   }
 
   async function persistMilestones(
@@ -799,6 +833,88 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       </form>
+
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>Email delivery</CardTitle>
+          <CardDescription>
+            Outbound reminder emails use this identity. CAN-SPAM requires a
+            physical address in General configuration below.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={saveEmailDelivery} className="space-y-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Status:</span>
+              {vendorSettings.emailVerifiedAt ? (
+                <Badge variant="secondary">Verified</Badge>
+              ) : (
+                <Badge variant="outline">Not verified — send a test email</Badge>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="fromName">From name</Label>
+              <Input
+                id="fromName"
+                value={vendorSettings.fromName ?? ""}
+                onChange={(e) =>
+                  setVendorSettings({
+                    ...vendorSettings,
+                    fromName: e.target.value,
+                  })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="fromEmail">From email</Label>
+              <Input
+                id="fromEmail"
+                type="email"
+                value={vendorSettings.fromEmail ?? ""}
+                onChange={(e) =>
+                  setVendorSettings({
+                    ...vendorSettings,
+                    fromEmail: e.target.value,
+                  })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="replyToEmail">Reply-to (optional)</Label>
+              <Input
+                id="replyToEmail"
+                type="email"
+                value={vendorSettings.replyToEmail ?? ""}
+                onChange={(e) =>
+                  setVendorSettings({
+                    ...vendorSettings,
+                    replyToEmail: e.target.value || null,
+                  })
+                }
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="submit">Save email delivery</Button>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={testingEmail || !vendorSettings.fromEmail}
+                onClick={() => void onSendTestEmail()}
+              >
+                {testingEmail ? "Sending…" : "Send test email"}
+              </Button>
+            </div>
+            {savedEmailDelivery ? (
+              <p className="text-sm text-muted-foreground">
+                Email delivery settings saved.
+              </p>
+            ) : null}
+            {testEmailMessage ? (
+              <p className="text-sm text-muted-foreground">{testEmailMessage}</p>
+            ) : null}
+          </form>
+        </CardContent>
+      </Card>
 
       <Card className="mt-6">
         <CardHeader>

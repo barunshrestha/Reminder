@@ -1,6 +1,7 @@
 import {
   IsArray,
   IsBoolean,
+  IsEmail,
   IsInt,
   IsOptional,
   IsString,
@@ -37,4 +38,16 @@ export class UpdateVendorSettingsDto {
   @IsOptional()
   @IsBoolean()
   digest_email_enabled?: boolean;
+
+  @IsOptional()
+  @IsEmail()
+  from_email?: string;
+
+  @IsOptional()
+  @IsString()
+  from_name?: string;
+
+  @IsOptional()
+  @IsEmail()
+  reply_to_email?: string;
 }

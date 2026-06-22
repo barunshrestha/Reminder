@@ -6,7 +6,7 @@ import { PrismaClient } from "@prisma/client";
 import { Worker } from "bullmq";
 import { resolve } from "path";
 import {
-  ConsoleEmailSender,
+  createEmailSenderFromEnv,
   ReminderRunExecutor,
 } from "@payment-reminder/reminders";
 import { REMINDER_QUEUE_NAME } from "./queue-names";
@@ -20,7 +20,7 @@ async function main() {
     process.env.STORAGE_ROOT ?? resolve(process.cwd(), "storage");
   const executor = new ReminderRunExecutor(
     prisma,
-    new ConsoleEmailSender(),
+    createEmailSenderFromEnv(),
     storageRoot,
   );
 

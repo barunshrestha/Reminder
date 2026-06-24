@@ -91,6 +91,37 @@ export async function sendTestVendorEmail(to?: string) {
   );
 }
 
+export async function sendInvoiceEmail(invoiceNumber: string) {
+  return api<{
+    ok: boolean;
+    to: string;
+    tier: number;
+    providerMessageId?: string;
+    invoice: InvoiceListItem;
+  }>(`/invoices/${encodeURIComponent(invoiceNumber)}/send-email`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export type InvoiceListItem = {
+  invoiceNumber: string;
+  clientName: string;
+  balanceDue: string;
+  dueDate: string;
+  status: string;
+  sendReminder: boolean;
+  emailOptOut: boolean;
+  clientEmail?: string | null;
+  clientPhone?: string | null;
+  notificationNumber: number;
+  reminderDeliveryMode: "email" | "phone" | "document_only" | "na";
+  lastTierSent?: number | null;
+  lastReminderSentAt?: string | null;
+  paidAt?: string | null;
+  comments?: string | null;
+};
+
 export class ApiConflictError extends Error {
   constructor(
     message: string,

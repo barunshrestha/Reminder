@@ -12,6 +12,11 @@ import {
   parseDueDateInput,
 } from "@/lib/invoice-format";
 import { AppShell } from "@/components/app-shell";
+import {
+  InvoiceColumnFilter,
+  useInvoiceVisibleColumns,
+} from "@/components/invoices/invoice-column-filter";
+import { type InvoiceColumnId } from "@/lib/invoice-columns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -151,6 +156,10 @@ export default function InvoicesPage() {
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState("");
+  const [visibleColumns, setVisibleColumns] = useInvoiceVisibleColumns(false);
+  const visible = new Set(visibleColumns);
+
+  const isVisible = (columnId: InvoiceColumnId) => visible.has(columnId);
 
   useEffect(() => {
     api<Invoice[]>("/invoices?status=open").then(setInvoices).catch(console.error);
@@ -289,7 +298,13 @@ export default function InvoicesPage() {
 
   return (
     <AppShell>
-      <h1 className="text-2xl font-semibold tracking-tight">Invoices</h1>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-2xl font-semibold tracking-tight">Invoices</h1>
+        <InvoiceColumnFilter
+          visibleColumns={visibleColumns}
+          onChange={setVisibleColumns}
+        />
+      </div>
       {error ? (
         <p className="mt-2 text-sm text-meta-1">{error}</p>
       ) : null}
@@ -299,127 +314,163 @@ export default function InvoicesPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Invoice</TableHead>
-                  <TableHead>Client</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Phone</TableHead>
-                  <TableHead>Balance</TableHead>
-                  <TableHead>Due</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Notifications</TableHead>
-                  <TableHead>Delivery mode</TableHead>
-                  <TableHead>Last tier</TableHead>
-                  <TableHead>Last reminder</TableHead>
-                  <TableHead>Paid at</TableHead>
-                  <TableHead>Comment</TableHead>
-                  <TableHead>Reminders</TableHead>
-                  <TableHead>Opt-out</TableHead>
+                  {isVisible("invoice") ? <TableHead>Invoice#</TableHead> : null}
+                  {isVisible("client") ? <TableHead>Client</TableHead> : null}
+                  {isVisible("email") ? <TableHead>Email</TableHead> : null}
+                  {isVisible("phone") ? <TableHead>Phone</TableHead> : null}
+                  {isVisible("balance") ? <TableHead>Balance</TableHead> : null}
+                  {isVisible("due") ? <TableHead>Due</TableHead> : null}
+                  {isVisible("status") ? <TableHead>Status</TableHead> : null}
+                  {isVisible("notification") ? (
+                    <TableHead>Notification</TableHead>
+                  ) : null}
+                  {isVisible("deliveryMode") ? (
+                    <TableHead>Delivery mode</TableHead>
+                  ) : null}
+                  {isVisible("lastTier") ? <TableHead>Last tier</TableHead> : null}
+                  {isVisible("lastReminder") ? (
+                    <TableHead>Last reminder</TableHead>
+                  ) : null}
+                  {isVisible("paidAt") ? <TableHead>Paid at</TableHead> : null}
+                  {isVisible("comment") ? <TableHead>Comment</TableHead> : null}
+                  {isVisible("reminder") ? <TableHead>Reminder</TableHead> : null}
+                  {isVisible("optOut") ? <TableHead>Opt-out</TableHead> : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {invoices.map((inv) => (
                   <TableRow key={inv.invoiceNumber}>
-                    <TableCell>
-                      <Link
-                        href={`/invoices/${encodeURIComponent(inv.invoiceNumber)}`}
-                        className="text-primary hover:underline"
-                      >
-                        {inv.invoiceNumber}
-                      </Link>
-                    </TableCell>
-                    <TableCell>{renderEditableCell(inv, "clientName")}</TableCell>
-                    <TableCell>{renderEditableCell(inv, "clientEmail")}</TableCell>
-                    <TableCell>{renderEditableCell(inv, "clientPhone")}</TableCell>
-                    <TableCell>{renderEditableCell(inv, "balanceDue")}</TableCell>
-                    <TableCell>{renderEditableCell(inv, "dueDate")}</TableCell>
-                    <TableCell>
-                      <select
-                        value={inv.status}
-                        onChange={(event) =>
-                          void patchInvoice(inv.invoiceNumber, {
-                            status: event.target.value,
-                          })
-                        }
-                        className={selectClass}
-                      >
-                        {STATUS_OPTIONS.map((status) => (
-                          <option key={status} value={status}>
-                            {formatStatus(status)}
-                          </option>
-                        ))}
-                      </select>
-                    </TableCell>
-                    <TableCell>
-                      <select
-                        value={inv.lastTierSent ?? ""}
-                        onChange={(event) =>
-                          void patchInvoice(inv.invoiceNumber, {
-                            last_tier_sent: event.target.value
-                              ? Number(event.target.value)
-                              : null,
-                          })
-                        }
-                        className={selectClass}
-                      >
-                        <option value="">None</option>
-                        {overdueTiers.map((tier) => (
-                          <option key={tier} value={tier}>
-                            {tier} days
-                          </option>
-                        ))}
-                      </select>
-                    </TableCell>
-                    <TableCell>
-                      <select
-                        value={inv.reminderDeliveryMode}
-                        onChange={(event) =>
-                          void patchInvoice(inv.invoiceNumber, {
-                            reminder_delivery_mode: event.target.value,
-                          })
-                        }
-                        className={`${selectClass} min-w-[8rem]`}
-                      >
-                        {DELIVERY_MODE_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </TableCell>
-                    <TableCell>{inv.lastTierSent ?? "—"}</TableCell>
-                    <TableCell>{formatDateTime(inv.lastReminderSentAt)}</TableCell>
-                    <TableCell>{formatDateTime(inv.paidAt)}</TableCell>
-                    <TableCell className="max-w-[12rem]">
-                      {renderEditableCell(inv, "comments")}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        onClick={() =>
-                          void patchInvoice(inv.invoiceNumber, {
-                            send_reminder: !inv.sendReminder,
-                          })
-                        }
-                      >
-                        {inv.sendReminder ? "On" : "Off"}
-                      </Button>
-                    </TableCell>
-                    <TableCell>
-                      <select
-                        value={inv.emailOptOut ? "yes" : "no"}
-                        onChange={(event) =>
-                          void patchInvoice(inv.invoiceNumber, {
-                            email_opt_out: event.target.value === "yes",
-                          })
-                        }
-                        className={selectClass}
-                      >
-                        <option value="no">No</option>
-                        <option value="yes">Yes</option>
-                      </select>
-                    </TableCell>
+                    {isVisible("invoice") ? (
+                      <TableCell>
+                        <Link
+                          href={`/invoices/${encodeURIComponent(inv.invoiceNumber)}`}
+                          className="text-primary hover:underline"
+                        >
+                          {inv.invoiceNumber}
+                        </Link>
+                      </TableCell>
+                    ) : null}
+                    {isVisible("client") ? (
+                      <TableCell>{renderEditableCell(inv, "clientName")}</TableCell>
+                    ) : null}
+                    {isVisible("email") ? (
+                      <TableCell>{renderEditableCell(inv, "clientEmail")}</TableCell>
+                    ) : null}
+                    {isVisible("phone") ? (
+                      <TableCell>{renderEditableCell(inv, "clientPhone")}</TableCell>
+                    ) : null}
+                    {isVisible("balance") ? (
+                      <TableCell>{renderEditableCell(inv, "balanceDue")}</TableCell>
+                    ) : null}
+                    {isVisible("due") ? (
+                      <TableCell>{renderEditableCell(inv, "dueDate")}</TableCell>
+                    ) : null}
+                    {isVisible("status") ? (
+                      <TableCell>
+                        <select
+                          value={inv.status}
+                          onChange={(event) =>
+                            void patchInvoice(inv.invoiceNumber, {
+                              status: event.target.value,
+                            })
+                          }
+                          className={selectClass}
+                        >
+                          {STATUS_OPTIONS.map((status) => (
+                            <option key={status} value={status}>
+                              {formatStatus(status)}
+                            </option>
+                          ))}
+                        </select>
+                      </TableCell>
+                    ) : null}
+                    {isVisible("notification") ? (
+                      <TableCell>
+                        <select
+                          value={inv.lastTierSent ?? ""}
+                          onChange={(event) =>
+                            void patchInvoice(inv.invoiceNumber, {
+                              last_tier_sent: event.target.value
+                                ? Number(event.target.value)
+                                : null,
+                            })
+                          }
+                          className={selectClass}
+                        >
+                          <option value="">None</option>
+                          {overdueTiers.map((tier) => (
+                            <option key={tier} value={tier}>
+                              {tier} days
+                            </option>
+                          ))}
+                        </select>
+                      </TableCell>
+                    ) : null}
+                    {isVisible("deliveryMode") ? (
+                      <TableCell>
+                        <select
+                          value={inv.reminderDeliveryMode}
+                          onChange={(event) =>
+                            void patchInvoice(inv.invoiceNumber, {
+                              reminder_delivery_mode: event.target.value,
+                            })
+                          }
+                          className={`${selectClass} min-w-[8rem]`}
+                        >
+                          {DELIVERY_MODE_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </TableCell>
+                    ) : null}
+                    {isVisible("lastTier") ? (
+                      <TableCell>{inv.lastTierSent ?? "—"}</TableCell>
+                    ) : null}
+                    {isVisible("lastReminder") ? (
+                      <TableCell>{formatDateTime(inv.lastReminderSentAt)}</TableCell>
+                    ) : null}
+                    {isVisible("paidAt") ? (
+                      <TableCell>{formatDateTime(inv.paidAt)}</TableCell>
+                    ) : null}
+                    {isVisible("comment") ? (
+                      <TableCell className="max-w-[12rem]">
+                        {renderEditableCell(inv, "comments")}
+                      </TableCell>
+                    ) : null}
+                    {isVisible("reminder") ? (
+                      <TableCell>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() =>
+                            void patchInvoice(inv.invoiceNumber, {
+                              send_reminder: !inv.sendReminder,
+                            })
+                          }
+                        >
+                          {inv.sendReminder ? "On" : "Off"}
+                        </Button>
+                      </TableCell>
+                    ) : null}
+                    {isVisible("optOut") ? (
+                      <TableCell>
+                        <select
+                          value={inv.emailOptOut ? "yes" : "no"}
+                          onChange={(event) =>
+                            void patchInvoice(inv.invoiceNumber, {
+                              email_opt_out: event.target.value === "yes",
+                            })
+                          }
+                          className={selectClass}
+                        >
+                          <option value="no">No</option>
+                          <option value="yes">Yes</option>
+                        </select>
+                      </TableCell>
+                    ) : null}
                   </TableRow>
                 ))}
               </TableBody>

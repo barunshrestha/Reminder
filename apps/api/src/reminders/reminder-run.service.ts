@@ -2,6 +2,7 @@ import { Injectable, Optional } from "@nestjs/common";
 import { resolve } from "path";
 import {
   ConsoleEmailSender,
+  createEmailSenderFromEnv,
   ReminderRunExecutor,
 } from "@payment-reminder/reminders";
 import { ConnectorsService } from "../connectors/connectors.service";
@@ -19,7 +20,7 @@ export class ReminderRunService {
       process.env.STORAGE_ROOT ?? resolve(process.cwd(), "storage");
     this.executor = new ReminderRunExecutor(
       prisma,
-      new ConsoleEmailSender(),
+      createEmailSenderFromEnv(),
       storageRoot,
       {
         beforeEvaluate: this.connectors

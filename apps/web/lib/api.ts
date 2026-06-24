@@ -51,6 +51,77 @@ export async function me() {
   return api<{ user: { email: string; role: string } }>("/auth/me");
 }
 
+export type VendorSettings = {
+  timezone: string;
+  vendorName: string | null;
+  vendorPhysicalAddress: string | null;
+  digestEmailEnabled: boolean;
+  fromEmail: string | null;
+  fromName: string | null;
+  replyToEmail: string | null;
+  emailVerifiedAt: string | null;
+};
+
+export async function getVendorSettings() {
+  return api<VendorSettings>("/vendor-settings");
+}
+
+export async function updateVendorSettings(data: {
+  timezone?: string;
+  vendor_name?: string | null;
+  vendor_physical_address?: string | null;
+  digest_email_enabled?: boolean;
+  from_email?: string | null;
+  from_name?: string | null;
+  reply_to_email?: string | null;
+}) {
+  return api<VendorSettings>("/vendor-settings", {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function sendTestVendorEmail(to?: string) {
+  return api<{ ok: boolean; to: string; providerMessageId?: string }>(
+    "/vendor-settings/test-email",
+    {
+      method: "POST",
+      body: JSON.stringify(to ? { to } : {}),
+    },
+  );
+}
+
+export async function sendInvoiceEmail(invoiceNumber: string) {
+  return api<{
+    ok: boolean;
+    to: string;
+    tier: number;
+    providerMessageId?: string;
+    invoice: InvoiceListItem;
+  }>(`/invoices/${encodeURIComponent(invoiceNumber)}/send-email`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export type InvoiceListItem = {
+  invoiceNumber: string;
+  clientName: string;
+  balanceDue: string;
+  dueDate: string;
+  status: string;
+  sendReminder: boolean;
+  emailOptOut: boolean;
+  clientEmail?: string | null;
+  clientPhone?: string | null;
+  notificationNumber: number;
+  reminderDeliveryMode: "email" | "phone" | "document_only" | "na";
+  lastTierSent?: number | null;
+  lastReminderSentAt?: string | null;
+  paidAt?: string | null;
+  comments?: string | null;
+};
+
 export class ApiConflictError extends Error {
   constructor(
     message: string,

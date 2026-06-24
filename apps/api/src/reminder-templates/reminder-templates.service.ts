@@ -11,6 +11,7 @@ import {
   type MilestoneTemplateContent,
   type ReminderTemplateData,
 } from "@payment-reminder/email-templates";
+import { buildUnsubscribeUrl } from "@payment-reminder/reminders";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
 import type { PreviewReminderTemplateDto } from "./dto/update-reminder-template.dto";
@@ -152,7 +153,7 @@ export class ReminderTemplatesService {
           vendorName: vendor.vendorName ?? undefined,
           vendorPhysicalAddress: vendor.vendorPhysicalAddress,
           includeComments: vendor.includeCommentsInEmail,
-          unsubscribeUrl: `https://localhost/api/v1/unsubscribe?invoice=${invoice.invoiceNumber}`,
+          unsubscribeUrl: buildUnsubscribeUrl(invoice.invoiceNumber),
         };
       }
     }

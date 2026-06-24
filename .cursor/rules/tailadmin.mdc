@@ -1,0 +1,171 @@
+---
+description: Use TailAdmin conventions and component patterns for all dashboard UI
+globs: **/*.{tsx,jsx,ts,js,css}
+alwaysApply: true
+---
+
+# TailAdmin Dashboard Rules
+
+## Stack & Versions
+- Tailwind CSS v4
+- TailAdmin free tier component system
+- React / Next.js (preferred), or Vue / SvelteKit if project uses it
+- ApexCharts for all data visualizations
+- Flatpickr for date pickers
+
+## Folder Structure
+Follow TailAdmin's structure:
+```
+src/
+├── components/
+│   ├── Charts/        # ApexCharts wrappers
+│   ├── Dashboard/     # Stat cards, summaries
+│   ├── Header/        # Top navbar
+│   ├── Sidebar/       # Side navigation
+│   ├── Tables/        # Data tables
+│   └── ui/            # Buttons, badges, modals, forms
+├── layout/
+│   └── DefaultLayout.tsx  # Main shell: Sidebar + Header + Content
+├── pages/             # Route-level pages
+└── types/             # Shared TypeScript types
+```
+
+## Layout Shell
+Always use the DefaultLayout wrapper for dashboard pages:
+```tsx
+<DefaultLayout>
+  <PageContent />
+</DefaultLayout>
+```
+
+The DefaultLayout must include:
+- Persistent sidebar on `lg:` and above
+- Collapsible hamburger sidebar on mobile
+- Fixed top header bar on all breakpoints
+- Bottom padding to avoid content clipping on mobile
+
+## Responsive Sidebar Pattern
+```tsx
+// Sidebar: hidden on mobile, visible on desktop
+<aside className="fixed left-0 top-0 z-9999 flex h-screen w-72 flex-col
+  overflow-y-hidden bg-black duration-300 ease-linear
+  lg:translate-x-0 -translate-x-full">
+  ...
+</aside>
+
+// Overlay for mobile sidebar
+<div className="fixed inset-0 z-999 bg-black/80 lg:hidden" />
+```
+
+## Color Tokens
+Use TailAdmin's design tokens — never hardcode hex values:
+| Token | Usage |
+|---|---|
+| `bg-white dark:bg-boxdark` | Card / panel backgrounds |
+| `bg-whiten` | Page background (light) |
+| `text-black dark:text-white` | Primary text |
+| `text-bodydark1`, `text-bodydark2` | Secondary / muted text |
+| `border-stroke dark:border-strokedark` | All borders and dividers |
+| `bg-primary` | Brand blue — buttons, active states |
+| `text-meta-3` | Success / green indicators |
+| `text-meta-1` | Danger / red indicators |
+| `text-meta-6` | Warning / yellow indicators |
+
+## Dark Mode
+- Always implement dark mode with Tailwind's `dark:` variant
+- Never use CSS overrides for dark mode
+- Toggle by adding/removing the `dark` class on `<html>`
+- Store preference in localStorage key `color-theme`
+
+## Stat Card Pattern
+```tsx
+<div className="rounded-sm border border-stroke bg-white px-7.5 py-6
+  shadow-default dark:border-strokedark dark:bg-boxdark">
+  <div className="flex h-11.5 w-11.5 items-center justify-center rounded-full bg-meta-2">
+    <Icon className="fill-primary" />
+  </div>
+  <div className="mt-4">
+    <h4 className="text-title-md font-bold text-black dark:text-white">$3,456</h4>
+    <span className="text-sm font-medium text-bodydark2">Total Revenue</span>
+  </div>
+</div>
+```
+
+## Tables
+- Use TailAdmin's table structure with `border-stroke` borders
+- Always include `overflow-x-auto` wrapper on mobile for horizontal scroll
+- Stripe rows with `hover:bg-gray-3 dark:hover:bg-meta-4`
+- Never use third-party table libraries unless the project already has one
+
+## Charts (ApexCharts)
+- Wrap every chart in a `<div className="rounded-sm border border-stroke bg-white ... dark:bg-boxdark">`
+- Always pass `theme: { mode: isDark ? 'dark' : 'light' }` to ApexCharts options
+- Use TailAdmin color palette in `colors: ['#3C50E0', '#80CAEE']`
+- Chart containers must be responsive: `width: '100%'`, fixed `height`
+
+## Forms & Inputs
+```tsx
+<input className="w-full rounded border-[1.5px] border-stroke bg-transparent
+  px-5 py-3 font-normal text-black outline-none transition
+  focus:border-primary active:border-primary
+  dark:border-form-strokedark dark:bg-form-input dark:text-white
+  dark:focus:border-primary" />
+```
+
+## Buttons
+```tsx
+// Primary
+<button className="inline-flex items-center justify-center rounded-md
+  bg-primary px-10 py-4 text-center font-medium text-white
+  hover:bg-opacity-90">
+  Save
+</button>
+
+// Outline
+<button className="inline-flex items-center justify-center rounded-md
+  border border-primary px-10 py-4 text-center font-medium text-primary
+  hover:bg-primary hover:text-white">
+  Cancel
+</button>
+```
+
+## Typography Scale
+| Class | Usage |
+|---|---|
+| `text-title-2xl` | Page hero numbers |
+| `text-title-xl` | Section headings |
+| `text-title-md` | Card titles, stat values |
+| `text-title-sm` | Subsection labels |
+| `text-sm` | Body, table content |
+| `text-xs` | Badges, captions, metadata |
+
+## Spacing
+- Use TailAdmin's extended spacing: `px-7.5`, `py-6`, `gap-7.5`
+- Card inner padding: `p-6` on mobile, `p-7.5` on `sm:` and up
+- Grid gaps: `gap-4 md:gap-6 2xl:gap-7.5`
+
+## Page Grid Layout
+```tsx
+<div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-6
+  xl:grid-cols-4 2xl:gap-7.5">
+  {/* Stat cards */}
+</div>
+
+<div className="mt-4 grid grid-cols-12 gap-4 md:mt-6 md:gap-6 2xl:mt-7.5 2xl:gap-7.5">
+  {/* Charts: span 8 cols, sidebar panel: span 4 cols */}
+</div>
+```
+
+## Do's
+- Always derive colors from TailAdmin tokens, not Tailwind defaults
+- Always pair every `bg-white` with `dark:bg-boxdark`
+- Always wrap page content in `DefaultLayout`
+- Use ApexCharts for any new chart — don't mix in Chart.js or Recharts
+- Keep sidebar nav items inside `<SidebarItem>` component
+
+## Don'ts
+- Don't hardcode hex colors anywhere in JSX or CSS
+- Don't add a new UI library without checking if TailAdmin already has the component
+- Don't use `fixed` positioning inside page content — only in Header/Sidebar
+- Don't skip the `dark:` variant on any background, text, or border class
+- Don't use `px-4` on cards — TailAdmin uses `px-7.5` for card padding

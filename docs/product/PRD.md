@@ -4,9 +4,9 @@
 
 | Field | Value |
 |-------|-------|
-| **Version** | 1.7 |
+| **Version** | 1.8 |
 | **Status** | Approved for implementation |
-| **Last updated** | 2026-06-12 |
+| **Last updated** | 2026-06-20 |
 | **Related docs** | [Engineering Standards](../engineering/standards.md) · [Agent Skills](../agents/skills.md) · [Reminder Agent](../agents/agent.md) |
 
 ---
@@ -207,6 +207,10 @@ Extraction uses an external vision API (OpenAI, configurable via `OPENAI_API_KEY
 | `missed_syncs_before_inactive` | `2` | Consecutive syncs absent → `is_active = false` |
 | `include_comments_in_email` | `false` | Whether `comments` appear in customer template |
 | `vendor_physical_address` | — | CAN-SPAM footer (required for production) |
+| `from_email` | — | Display From address for customer reminder emails (platform-managed provider) |
+| `from_name` | — | Display name shown alongside `from_email` |
+| `reply_to_email` | — | Optional Reply-To header for customer replies |
+| `email_verified_at` | — | Set when admin successfully sends a test email from Settings |
 | `digest_email_enabled` | `false` | Send non-blocking run summary to vendor users |
 | `default_payment_terms_days` | `30` | When a scanned invoice has no explicit `due_date`, compute `due_date = invoice_date + N days`. Vendor may override on the review screen. |
 | `reminders_enabled` | `true` | Master toggle for automatic reminder processing |
@@ -482,11 +486,13 @@ Vendors configure reminders in **Settings** using two layers:
 
 ## 14. Customer email delivery (`reminder_delivery_mode = email`)
 
-- **SND-01:** Provider: AWS SES or SendGrid (deployment choice).
+- **SND-01:** Provider: **platform-managed** SendGrid or console (local dev). Deployment credentials via `EMAIL_PROVIDER`, `SENDGRID_API_KEY`, `EMAIL_DEFAULT_FROM`; vendor configures display **From name**, **From email**, and optional **Reply-To** in Settings.
+- **SND-01a:** Admin **Send test email** from Settings; on success sets `email_verified_at`. Dev default from address: `taremamllc@gmail.com`.
 - **SND-02:** Increment `notification_number` and set `last_tier_sent` when provider **accepts/sends** the message (HTTP/API success). Delivery webhooks may update `send_log` only; they do not gate counters in v1.
-- **SND-03:** Include List-Unsubscribe header and one-click unsubscribe URL.
-- **SND-04:** CAN-SPAM: physical address in footer, truthful subject, vendor identification.
+- **SND-03:** Include List-Unsubscribe header and one-click unsubscribe URL built from `PUBLIC_API_BASE_URL` (`/public/unsubscribe?invoice=…`).
+- **SND-04:** CAN-SPAM: physical address in footer, truthful subject, vendor identification. Skip customer email sends (audit `email.skipped.misconfigured`) when `from_email` or `vendor_physical_address` is missing.
 - **SND-05:** Failed sends retried per provider policy; manual retry from dashboard (v1).
+- **SND-06:** `reminder_delivery_mode = phone` (SMS) is **not implemented in v1**; eligible phone-mode invoices are skipped with audit `sms.not_implemented` until Phase 2.
 
 ### 14.1 Notification documents (`document_only`)
 

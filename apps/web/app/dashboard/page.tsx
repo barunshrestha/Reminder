@@ -28,7 +28,7 @@ export default function DashboardPage() {
     <AppShell>
       <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
       {metrics ? (
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           <Card>
             <CardHeader>
               <CardTitle className="text-base font-medium">
@@ -65,7 +65,7 @@ export default function DashboardPage() {
           </Card>
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           <Skeleton className="h-28 w-full" />
           <Skeleton className="h-28 w-full" />
           <Skeleton className="h-28 w-full" />

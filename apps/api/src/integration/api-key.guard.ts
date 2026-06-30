@@ -7,13 +7,16 @@ import {
 import { createHash } from "crypto";
 import type { Request } from "express";
 import { PrismaService } from "../prisma/prisma.service";
+import type { TenantContextData } from "../tenancy/tenant-context";
 
 @Injectable()
 export class ApiKeyGuard implements CanActivate {
   constructor(private readonly prisma: PrismaService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const req = context.switchToHttp().getRequest<Request>();
+    const req = context.switchToHttp().getRequest<
+      Request & { apiKeyId?: string; tenantContext?: TenantContextData }
+    >();
     const key = extractApiKey(req);
     if (!key) {
       throw new UnauthorizedException("API key required");
@@ -22,6 +25,7 @@ export class ApiKeyGuard implements CanActivate {
     const keyHash = hashApiKey(key);
     const record = await this.prisma.apiKey.findFirst({
       where: { keyHash, revokedAt: null },
+      include: { tenant: { select: { accountId: true } } },
     });
     if (!record) {
       throw new UnauthorizedException("Invalid API key");
@@ -32,7 +36,14 @@ export class ApiKeyGuard implements CanActivate {
       data: { lastUsedAt: new Date() },
     });
 
-    (req as Request & { apiKeyId?: string }).apiKeyId = record.id;
+    req.apiKeyId = record.id;
+    req.tenantContext = {
+      tenantId: record.tenantId,
+      accountId: record.tenant.accountId,
+      userId: "api-key",
+      tenantRole: "admin",
+      mfaVerified: true,
+    };
     return true;
   }
 }

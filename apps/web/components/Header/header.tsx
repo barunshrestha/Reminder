@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { logout, me } from "@/lib/api";
+import { OrgSwitcher } from "@/components/org-switcher";
 import { Button } from "@/components/ui/button";
 import { HamburgerButton } from "@/components/ui/hamburger-button";
 import { cn } from "@/lib/utils";
@@ -15,13 +16,15 @@ export function Header({
 }) {
   const [userEmail, setUserEmail] = useState("");
   const [userRole, setUserRole] = useState("");
+  const [tenantId, setTenantId] = useState<string | undefined>();
   const [isDark, setIsDark] = useState(false);
 
   useEffect(() => {
     me()
       .then((result) => {
         setUserEmail(result.user.email);
-        setUserRole(result.user.role);
+        setUserRole(result.user.role ?? "");
+        setTenantId(result.user.tenantId);
       })
       .catch(() => undefined);
   }, []);
@@ -64,6 +67,7 @@ export function Header({
           >
             {isDark ? "Light" : "Dark"}
           </Button>
+          <OrgSwitcher currentTenantId={tenantId} />
           <div className="hidden max-w-[10rem] truncate text-right sm:block md:max-w-[12rem]">
             <span className="block truncate text-sm font-medium text-black dark:text-white">
               {userEmail || "User"}

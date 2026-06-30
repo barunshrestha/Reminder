@@ -4,7 +4,6 @@ import {
 } from "@nestjs/common";
 import {
   buildCronFromPreset,
-  CANONICAL_REMINDER_SCHEDULE_ID,
   describeProcessingSchedule,
   inferTierPreset,
   resolveOverdueTiers,
@@ -13,6 +12,8 @@ import {
 } from "@payment-reminder/domain";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { requireTenantId } from "../tenancy/tenant-context";
+import { tenantFilter } from "../tenancy/tenant-scope";
 import { UpdateReminderConfigDto } from "./dto/update-reminder-config.dto";
 
 export interface ReminderConfigResponse {
@@ -28,6 +29,8 @@ export interface ReminderConfigResponse {
   nextRunDescription: string;
 }
 
+const CANONICAL_SCHEDULE_NAME = "Default reminder processing";
+
 @Injectable()
 export class ReminderConfigService {
   constructor(
@@ -36,24 +39,25 @@ export class ReminderConfigService {
   ) {}
 
   async get(): Promise<ReminderConfigResponse> {
-    const vendor = await this.prisma.vendorSettings.findFirstOrThrow({
-      where: { id: "default" },
+    const settings = await this.prisma.tenantSettings.findUniqueOrThrow({
+      where: { tenantId: requireTenantId() },
     });
-    const schedule = await this.getOrCreateCanonicalSchedule(vendor.timezone);
-    return this.toResponse(vendor, schedule);
+    const schedule = await this.getOrCreateCanonicalSchedule(settings.timezone);
+    return this.toResponse(settings, schedule);
   }
 
   async update(dto: UpdateReminderConfigDto): Promise<ReminderConfigResponse> {
-    const vendor = await this.prisma.vendorSettings.findFirstOrThrow({
-      where: { id: "default" },
+    const tenantId = requireTenantId();
+    const settings = await this.prisma.tenantSettings.findUniqueOrThrow({
+      where: { tenantId },
     });
-    const schedule = await this.getOrCreateCanonicalSchedule(vendor.timezone);
+    const schedule = await this.getOrCreateCanonicalSchedule(settings.timezone);
 
     const tierPreset =
-      dto.tierPreset ?? inferTierPreset(vendor.overdueTiers);
+      dto.tierPreset ?? inferTierPreset(settings.overdueTiers);
     const overdueTiers = resolveOverdueTiers(
       tierPreset,
-      dto.overdueTiers ?? vendor.overdueTiers,
+      dto.overdueTiers ?? settings.overdueTiers,
     );
     const tierValidation = validateOverdueTiers(overdueTiers);
     if (!tierValidation.valid) {
@@ -61,12 +65,12 @@ export class ReminderConfigService {
     }
 
     const processingPreset = parseProcessingPreset(
-      dto.processingPreset ?? vendor.processingPreset,
+      dto.processingPreset ?? settings.processingPreset,
     );
-    const runHour = dto.runHour ?? vendor.processingRunHour;
-    const weeklyDay = dto.weeklyDay ?? vendor.processingWeeklyDay;
-    const timezone = dto.timezone ?? vendor.timezone;
-    const remindersEnabled = dto.remindersEnabled ?? vendor.remindersEnabled;
+    const runHour = dto.runHour ?? settings.processingRunHour;
+    const weeklyDay = dto.weeklyDay ?? settings.processingWeeklyDay;
+    const timezone = dto.timezone ?? settings.timezone;
+    const remindersEnabled = dto.remindersEnabled ?? settings.remindersEnabled;
     const syncBeforeCheck =
       dto.syncBeforeCheck ?? schedule.runSyncBeforeEvaluate;
 
@@ -82,8 +86,8 @@ export class ReminderConfigService {
     const scheduleEnabled =
       remindersEnabled && processingPreset !== "manual";
 
-    const updatedVendor = await this.prisma.vendorSettings.update({
-      where: { id: "default" },
+    const updatedSettings = await this.prisma.tenantSettings.update({
+      where: { tenantId },
       data: {
         overdueTiers,
         timezone,
@@ -95,7 +99,7 @@ export class ReminderConfigService {
     });
 
     const updatedSchedule = await this.prisma.schedule.update({
-      where: { id: CANONICAL_REMINDER_SCHEDULE_ID },
+      where: { id: schedule.id },
       data: {
         cronExpression,
         rrule: null,
@@ -113,12 +117,12 @@ export class ReminderConfigService {
       schedule_enabled: scheduleEnabled,
     });
 
-    return this.toResponse(updatedVendor, updatedSchedule);
+    return this.toResponse(updatedSettings, updatedSchedule);
   }
 
   private async getOrCreateCanonicalSchedule(timezone: string) {
-    const existing = await this.prisma.schedule.findUnique({
-      where: { id: CANONICAL_REMINDER_SCHEDULE_ID },
+    const existing = await this.prisma.schedule.findFirst({
+      where: { ...tenantFilter(), name: CANONICAL_SCHEDULE_NAME },
     });
     if (existing) {
       return existing;
@@ -126,8 +130,8 @@ export class ReminderConfigService {
 
     return this.prisma.schedule.create({
       data: {
-        id: CANONICAL_REMINDER_SCHEDULE_ID,
-        name: "Default reminder processing",
+        tenantId: requireTenantId(),
+        name: CANONICAL_SCHEDULE_NAME,
         cronExpression: "0 8 * * *",
         timezone,
         enabled: true,
@@ -138,7 +142,7 @@ export class ReminderConfigService {
   }
 
   private toResponse(
-    vendor: {
+    settings: {
       overdueTiers: number[];
       timezone: string;
       remindersEnabled: boolean;
@@ -152,24 +156,24 @@ export class ReminderConfigService {
       runSyncBeforeEvaluate: boolean;
     },
   ): ReminderConfigResponse {
-    const processingPreset = parseProcessingPreset(vendor.processingPreset);
+    const processingPreset = parseProcessingPreset(settings.processingPreset);
 
     return {
-      overdueTiers: vendor.overdueTiers,
-      tierPreset: inferTierPreset(vendor.overdueTiers),
-      remindersEnabled: vendor.remindersEnabled,
+      overdueTiers: settings.overdueTiers,
+      tierPreset: inferTierPreset(settings.overdueTiers),
+      remindersEnabled: settings.remindersEnabled,
       processingPreset,
-      weeklyDay: vendor.processingWeeklyDay,
-      runHour: vendor.processingRunHour,
-      timezone: vendor.timezone,
+      weeklyDay: settings.processingWeeklyDay,
+      runHour: settings.processingRunHour,
+      timezone: settings.timezone,
       syncBeforeCheck: schedule.runSyncBeforeEvaluate,
       scheduleId: schedule.id,
       nextRunDescription: describeProcessingSchedule({
         processingPreset,
-        runHour: vendor.processingRunHour,
-        weeklyDay: vendor.processingWeeklyDay,
-        timezone: vendor.timezone,
-        remindersEnabled: vendor.remindersEnabled,
+        runHour: settings.processingRunHour,
+        weeklyDay: settings.processingWeeklyDay,
+        timezone: settings.timezone,
+        remindersEnabled: settings.remindersEnabled,
       }),
     };
   }

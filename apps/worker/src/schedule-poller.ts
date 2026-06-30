@@ -9,9 +9,10 @@ export function startSchedulePoller(
   prisma: PrismaClient,
   connection: { host: string; port: number },
 ): void {
-  const queue = new Queue<{ scheduleId: string }>(REMINDER_QUEUE_NAME, {
-    connection,
-  });
+  const queue = new Queue<{ scheduleId: string; tenantId: string; dryRun?: boolean }>(
+    REMINDER_QUEUE_NAME,
+    { connection },
+  );
 
   const tick = async () => {
     const schedules = await prisma.schedule.findMany({
@@ -38,7 +39,7 @@ export function startSchedulePoller(
       if (due) {
         await queue.add(
           "run-schedule",
-          { scheduleId: schedule.id },
+          { scheduleId: schedule.id, tenantId: schedule.tenantId },
           { jobId: `schedule-${schedule.id}-${now.toISOString().slice(0, 16)}` },
         );
         console.log(`Enqueued schedule ${schedule.name} (${schedule.id})`);

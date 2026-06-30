@@ -10,6 +10,7 @@ import {
   ReminderRunExecutor,
 } from "@payment-reminder/reminders";
 import { REMINDER_QUEUE_NAME } from "./queue-names";
+import { dispatchReminderRunFailureAlert } from "./push-alerts";
 import { startSchedulePoller } from "./schedule-poller";
 
 async function main() {
@@ -24,15 +25,34 @@ async function main() {
     storageRoot,
   );
 
-  const worker = new Worker<{ scheduleId: string; dryRun?: boolean }>(
+  const worker = new Worker<{ scheduleId: string; tenantId: string; dryRun?: boolean }>(
     REMINDER_QUEUE_NAME,
     async (job) => {
       console.log(`Processing schedule run job ${job.id}`);
-      const result = await executor.execute({
-        scheduleId: job.data.scheduleId,
-        dryRun: job.data.dryRun,
-      });
-      return result;
+      try {
+        const result = await executor.execute({
+          scheduleId: job.data.scheduleId,
+          tenantId: job.data.tenantId,
+          dryRun: job.data.dryRun,
+        });
+        if (result.stats.failed > 0) {
+          await dispatchReminderRunFailureAlert(
+            prisma,
+            job.data.scheduleId,
+            `${result.stats.failed} reminder(s) failed`,
+          );
+        }
+        return result;
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Schedule run failed";
+        await dispatchReminderRunFailureAlert(
+          prisma,
+          job.data.scheduleId,
+          message,
+        );
+        throw error;
+      }
     },
     { connection },
   );

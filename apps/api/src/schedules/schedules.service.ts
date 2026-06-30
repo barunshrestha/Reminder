@@ -5,6 +5,8 @@ import {
 } from "@nestjs/common";
 import { validateScheduleExpression } from "@payment-reminder/domain";
 import { PrismaService } from "../prisma/prisma.service";
+import { requireTenantId } from "../tenancy/tenant-context";
+import { tenantFilter } from "../tenancy/tenant-scope";
 import { ReminderQueueService } from "../reminders/reminder-queue.service";
 import { CreateScheduleDto } from "./dto/create-schedule.dto";
 import { UpdateScheduleDto } from "./dto/update-schedule.dto";
@@ -20,6 +22,7 @@ export class SchedulesService {
     this.assertValidExpression(dto);
     return this.prisma.schedule.create({
       data: {
+        tenantId: requireTenantId(),
         name: dto.name,
         cronExpression: dto.cronExpression ?? null,
         rrule: dto.rrule ?? null,
@@ -32,11 +35,16 @@ export class SchedulesService {
   }
 
   findAll() {
-    return this.prisma.schedule.findMany({ orderBy: { createdAt: "desc" } });
+    return this.prisma.schedule.findMany({
+      where: tenantFilter(),
+      orderBy: { createdAt: "desc" },
+    });
   }
 
   async findOne(id: string) {
-    const schedule = await this.prisma.schedule.findUnique({ where: { id } });
+    const schedule = await this.prisma.schedule.findFirst({
+      where: { id, ...tenantFilter() },
+    });
     if (!schedule) {
       throw new NotFoundException("Schedule not found");
     }
@@ -81,8 +89,12 @@ export class SchedulesService {
   }
 
   async triggerRun(scheduleId: string, dryRun?: boolean) {
-    await this.findOne(scheduleId);
-    return this.reminderQueue.enqueueRun({ scheduleId, dryRun });
+    const schedule = await this.findOne(scheduleId);
+    return this.reminderQueue.enqueueRun({
+      scheduleId,
+      tenantId: schedule.tenantId,
+      dryRun,
+    });
   }
 
   private assertValidExpression(input: {

@@ -19,6 +19,7 @@ import {
 } from "@/lib/api";
 import { api } from "@/lib/api";
 import { AppShell } from "@/components/app-shell";
+import { NotificationsSettingsCard } from "@/components/settings/notifications-settings-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,8 +40,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
-type VendorSettings = import("@/lib/api").VendorSettings;
 
 const WEEKDAYS = [
   { value: "0", label: "Sunday" },
@@ -454,6 +453,8 @@ export default function SettingsPage() {
   return (
     <AppShell>
       <h1 className="text-2xl font-semibold tracking-tight">Vendor settings</h1>
+
+      <NotificationsSettingsCard />
 
       <form onSubmit={saveReminders} className="space-y-6">
         <Card>

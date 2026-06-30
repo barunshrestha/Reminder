@@ -6,7 +6,7 @@
     "apps/*"
   ],
   "scripts": {
-    "test": "npm run test -w @payment-reminder/domain && npm run test -w @payment-reminder/email-templates && npm run test -w @payment-reminder/reminders && npm run test -w @payment-reminder/api",
+    "test": "npm run test -w @payment-reminder/domain && npm run test -w @payment-reminder/email-templates && npm run test -w @payment-reminder/reminders && npm run test -w @payment-reminder/push-notifications && npm run test -w @payment-reminder/api",
     "test:email-templates": "npm run test -w @payment-reminder/email-templates",
     "test:reminders": "npm run test -w @payment-reminder/reminders",
     "test:domain": "npm run test -w @payment-reminder/domain",

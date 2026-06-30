@@ -1,5 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { requireTenantId } from "../tenancy/tenant-context";
+import { tenantFilter } from "../tenancy/tenant-scope";
 import { CreateMappingProfileDto } from "./dto/create-mapping-profile.dto";
 import { UpdateMappingProfileDto } from "./dto/update-mapping-profile.dto";
 
@@ -10,6 +12,7 @@ export class MappingProfilesService {
   create(dto: CreateMappingProfileDto) {
     return this.prisma.mappingProfile.create({
       data: {
+        tenantId: requireTenantId(),
         name: dto.name,
         columnMap: dto.columnMap,
       },
@@ -18,13 +21,14 @@ export class MappingProfilesService {
 
   findAll() {
     return this.prisma.mappingProfile.findMany({
+      where: tenantFilter(),
       orderBy: { updatedAt: "desc" },
     });
   }
 
   async findOne(id: string) {
-    const profile = await this.prisma.mappingProfile.findUnique({
-      where: { id },
+    const profile = await this.prisma.mappingProfile.findFirst({
+      where: { id, ...tenantFilter() },
     });
     if (!profile) {
       throw new NotFoundException("Mapping profile not found");

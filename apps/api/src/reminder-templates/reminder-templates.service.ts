@@ -14,6 +14,12 @@ import {
 import { buildUnsubscribeUrl } from "@payment-reminder/reminders";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { requireTenantId } from "../tenancy/tenant-context";
+import {
+  tenantFilter,
+  tenantInvoiceUnique,
+  tenantMilestoneUnique,
+} from "../tenancy/tenant-scope";
 import type { PreviewReminderTemplateDto } from "./dto/update-reminder-template.dto";
 import type { UpdateReminderTemplateDto } from "./dto/update-reminder-template.dto";
 
@@ -51,13 +57,15 @@ export class ReminderTemplatesService {
     templates: ReminderTemplateItem[];
     mergeFields: string[];
   }> {
-    const vendor = await this.prisma.vendorSettings.findFirstOrThrow({
-      where: { id: "default" },
+    const settings = await this.prisma.tenantSettings.findUniqueOrThrow({
+      where: { tenantId: requireTenantId() },
     });
-    const stored = await this.prisma.reminderMilestoneTemplate.findMany();
+    const stored = await this.prisma.reminderMilestoneTemplate.findMany({
+      where: tenantFilter(),
+    });
     const storedByTier = new Map(stored.map((row) => [row.tierDays, row]));
 
-    const templates = vendor.overdueTiers.map((tierDays) =>
+    const templates = settings.overdueTiers.map((tierDays) =>
       this.toTemplateItem(tierDays, storedByTier.get(tierDays)),
     );
 
@@ -70,7 +78,7 @@ export class ReminderTemplatesService {
   async getOne(tierDays: number): Promise<ReminderTemplateItem> {
     await this.assertTierAllowed(tierDays);
     const stored = await this.prisma.reminderMilestoneTemplate.findUnique({
-      where: { tierDays },
+      where: tenantMilestoneUnique(tierDays),
     });
     return this.toTemplateItem(tierDays, stored ?? undefined);
   }
@@ -81,9 +89,11 @@ export class ReminderTemplatesService {
   ): Promise<ReminderTemplateItem> {
     await this.assertTierAllowed(tierDays);
 
+    const tenantId = requireTenantId();
     const row = await this.prisma.reminderMilestoneTemplate.upsert({
-      where: { tierDays },
+      where: tenantMilestoneUnique(tierDays),
       create: {
+        tenantId,
         tierDays,
         subject: dto.subject.trim(),
         bodyHtml: dto.bodyHtml.trim(),
@@ -107,7 +117,7 @@ export class ReminderTemplatesService {
     await this.assertTierAllowed(tierDays);
 
     await this.prisma.reminderMilestoneTemplate.deleteMany({
-      where: { tierDays },
+      where: { ...tenantFilter(), tierDays },
     });
 
     await this.audit.record("reminder_template.reset", {
@@ -118,23 +128,23 @@ export class ReminderTemplatesService {
   }
 
   async preview(dto: PreviewReminderTemplateDto) {
-    const vendor = await this.prisma.vendorSettings.findFirstOrThrow({
-      where: { id: "default" },
+    const settings = await this.prisma.tenantSettings.findUniqueOrThrow({
+      where: { tenantId: requireTenantId() },
     });
 
     let sample = {
       ...SAMPLE_TEMPLATE_DATA,
       daysBehind: dto.tierDays + 1,
-      vendorName: vendor.vendorName ?? SAMPLE_TEMPLATE_DATA.vendorName,
+      vendorName: settings.vendorName ?? SAMPLE_TEMPLATE_DATA.vendorName,
       vendorPhysicalAddress:
-        vendor.vendorPhysicalAddress ??
+        settings.vendorPhysicalAddress ??
         SAMPLE_TEMPLATE_DATA.vendorPhysicalAddress,
-      includeComments: vendor.includeCommentsInEmail,
+      includeComments: settings.includeCommentsInEmail,
     };
 
     if (dto.invoiceNumber) {
       const invoice = await this.prisma.invoice.findUnique({
-        where: { invoiceNumber: dto.invoiceNumber },
+        where: tenantInvoiceUnique(dto.invoiceNumber),
       });
       if (invoice) {
         sample = {
@@ -150,9 +160,9 @@ export class ReminderTemplatesService {
           daysBehind: dto.tierDays + 5,
           notificationNumber: invoice.notificationNumber,
           comments: invoice.comments,
-          vendorName: vendor.vendorName ?? undefined,
-          vendorPhysicalAddress: vendor.vendorPhysicalAddress,
-          includeComments: vendor.includeCommentsInEmail,
+          vendorName: settings.vendorName ?? undefined,
+          vendorPhysicalAddress: settings.vendorPhysicalAddress,
+          includeComments: settings.includeCommentsInEmail,
           unsubscribeUrl: buildUnsubscribeUrl(invoice.invoiceNumber),
         };
       }
@@ -176,7 +186,7 @@ export class ReminderTemplatesService {
 
   async loadTemplateMap(): Promise<Map<number, MilestoneTemplateContent>> {
     const rows = await this.prisma.reminderMilestoneTemplate.findMany({
-      where: { isCustom: true },
+      where: { ...tenantFilter(), isCustom: true },
     });
     const map = new Map<number, MilestoneTemplateContent>();
     for (const row of rows) {
@@ -228,11 +238,11 @@ export class ReminderTemplatesService {
       throw new BadRequestException("tierDays must be a positive integer");
     }
 
-    const vendor = await this.prisma.vendorSettings.findFirstOrThrow({
-      where: { id: "default" },
+    const settings = await this.prisma.tenantSettings.findUniqueOrThrow({
+      where: { tenantId: requireTenantId() },
     });
 
-    if (!vendor.overdueTiers.includes(tierDays)) {
+    if (!settings.overdueTiers.includes(tierDays)) {
       throw new BadRequestException(
         `Tier ${tierDays} is not in the current overdue milestones`,
       );

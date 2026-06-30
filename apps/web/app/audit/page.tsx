@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { AppShell } from "@/components/app-shell";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -20,6 +20,14 @@ type AuditEvent = {
   payload: unknown;
 };
 
+function formatPayload(payload: unknown): string {
+  try {
+    return JSON.stringify(payload, null, 2);
+  } catch {
+    return String(payload);
+  }
+}
+
 export default function AuditPage() {
   const [events, setEvents] = useState<AuditEvent[]>([]);
 
@@ -30,7 +38,24 @@ export default function AuditPage() {
   return (
     <AppShell>
       <h1 className="text-2xl font-semibold tracking-tight">Audit log</h1>
-      <Card>
+      <div className="mt-4 space-y-3 lg:hidden">
+        {events.map((event) => (
+          <Card key={event.id}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">{event.eventType}</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                {new Date(event.createdAt).toLocaleString()}
+              </p>
+            </CardHeader>
+            <CardContent>
+              <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all text-xs">
+                {formatPayload(event.payload)}
+              </pre>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      <Card className="mt-4 hidden lg:block">
         <CardContent className="pt-6">
           <Table>
             <TableHeader>
@@ -41,16 +66,16 @@ export default function AuditPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {events.map((e) => (
-                <TableRow key={e.id}>
+              {events.map((event) => (
+                <TableRow key={event.id}>
                   <TableCell>
-                    {new Date(e.createdAt).toLocaleString()}
+                    {new Date(event.createdAt).toLocaleString()}
                   </TableCell>
-                  <TableCell>{e.eventType}</TableCell>
+                  <TableCell>{event.eventType}</TableCell>
                   <TableCell>
-                    <code className="text-xs">
-                      {JSON.stringify(e.payload).slice(0, 120)}…
-                    </code>
+                    <pre className="max-h-32 overflow-auto whitespace-pre-wrap text-xs">
+                      {formatPayload(event.payload)}
+                    </pre>
                   </TableCell>
                 </TableRow>
               ))}

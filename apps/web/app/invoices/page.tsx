@@ -16,6 +16,7 @@ import {
   InvoiceColumnFilter,
   useInvoiceVisibleColumns,
 } from "@/components/invoices/invoice-column-filter";
+import { InvoiceMobileList } from "@/components/invoices/invoice-mobile-list";
 import { type InvoiceColumnId } from "@/lib/invoice-columns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -310,7 +311,14 @@ export default function InvoicesPage() {
       ) : null}
       <Card>
         <CardContent className="pt-6">
-          <div className="overflow-x-auto">
+          <InvoiceMobileList
+            invoices={invoices}
+            visibleColumns={visibleColumns}
+            onToggleReminder={(invoiceNumber, enabled) =>
+              void patchInvoice(invoiceNumber, { send_reminder: enabled })
+            }
+          />
+          <div className="hidden overflow-x-auto lg:block">
             <Table>
               <TableHeader>
                 <TableRow>

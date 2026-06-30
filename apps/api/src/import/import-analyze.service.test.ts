@@ -3,6 +3,10 @@ import { ImportRowStatus, ImportSource } from "@prisma/client";
 import { ImportAnalyzeService } from "./import-analyze.service";
 import type { UpsertInvoiceInput } from "../invoices/invoice-upsert.service";
 
+vi.mock("../tenancy/tenant-context", () => ({
+  requireTenantId: () => "tenant-test-id",
+}));
+
 function baseInput(overrides: Partial<UpsertInvoiceInput> = {}): UpsertInvoiceInput {
   return {
     clientName: "Acme",

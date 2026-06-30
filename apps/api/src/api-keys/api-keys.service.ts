@@ -1,5 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { requireTenantId } from "../tenancy/tenant-context";
+import { tenantFilter } from "../tenancy/tenant-scope";
 import { generateApiKey } from "../integration/api-key.guard";
 
 @Injectable()
@@ -8,7 +10,7 @@ export class ApiKeysService {
 
   list() {
     return this.prisma.apiKey.findMany({
-      where: { revokedAt: null },
+      where: { ...tenantFilter(), revokedAt: null },
       orderBy: { createdAt: "desc" },
       select: {
         id: true,
@@ -23,7 +25,7 @@ export class ApiKeysService {
   async create(name: string) {
     const { plainKey, keyHash, keyPrefix } = generateApiKey();
     const record = await this.prisma.apiKey.create({
-      data: { name, keyHash, keyPrefix },
+      data: { tenantId: requireTenantId(), name, keyHash, keyPrefix },
     });
     return {
       id: record.id,

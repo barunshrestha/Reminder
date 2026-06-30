@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { ImportSource } from "@prisma/client";
 import { AuditService } from "../audit/audit.service";
+import { NotificationDispatcherService } from "../notifications/notification-dispatcher.service";
 import { MappingProfilesService } from "../mapping-profiles/mapping-profiles.service";
 import {
   mapSpreadsheetRow,
@@ -44,6 +45,7 @@ export class ImportService {
     private readonly mappingProfiles: MappingProfilesService,
     private readonly audit: AuditService,
     private readonly uploads: SpreadsheetUploadService,
+    private readonly notifications: NotificationDispatcherService,
   ) {}
 
   async analyzeSpreadsheet(
@@ -128,6 +130,15 @@ export class ImportService {
       error_count: errors.length,
     });
 
+    if (errors.length > 0) {
+      void this.notifications.dispatchAlert("import_failure", {
+        title: "Import validation errors",
+        body: `${errors.length} row(s) failed validation in ${filename}`,
+        url: "/import",
+        tag: "import-failure",
+      });
+    }
+
     return {
       ...batchResult,
       uploadId,
@@ -153,6 +164,15 @@ export class ImportService {
       batch_id: batchId,
       ...result,
     });
+
+    if (result.errors.length > 0) {
+      void this.notifications.dispatchAlert("import_failure", {
+        title: "Import commit errors",
+        body: `${result.errors.length} row(s) failed during import commit`,
+        url: "/import",
+        tag: "import-failure",
+      });
+    }
 
     return result;
   }

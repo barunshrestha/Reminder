@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { me } from "@/lib/api";
+import { me, setStoredTenant } from "@/lib/api";
 import { DefaultLayout } from "@/layout/DefaultLayout";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -16,7 +16,11 @@ export function AppShell({
 
   useEffect(() => {
     me()
-      .then(() => undefined)
+      .then((result) => {
+        if (result.user.tenantId) {
+          setStoredTenant(result.user.tenantId, result.user.tenantSlug);
+        }
+      })
       .catch(() => router.replace("/login"))
       .finally(() => setLoading(false));
   }, [router]);

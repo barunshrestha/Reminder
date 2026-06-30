@@ -20,6 +20,11 @@ import {
 } from "@payment-reminder/reminders";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { requireTenantId } from "../tenancy/tenant-context";
+import {
+  tenantInvoiceUnique,
+  tenantMilestoneUnique,
+} from "../tenancy/tenant-scope";
 
 @Injectable()
 export class InvoiceEmailService {
@@ -35,7 +40,7 @@ export class InvoiceEmailService {
 
   async sendToClient(invoiceNumber: string, actorUserId?: string) {
     const invoice = await this.prisma.invoice.findUnique({
-      where: { invoiceNumber },
+      where: tenantInvoiceUnique(invoiceNumber),
     });
     if (!invoice) {
       throw new NotFoundException("Invoice not found");
@@ -52,17 +57,17 @@ export class InvoiceEmailService {
       throw new BadRequestException("Invoice is not open with a balance due");
     }
 
-    const vendor = await this.prisma.vendorSettings.findFirstOrThrow({
-      where: { id: "default" },
+    const settings = await this.prisma.tenantSettings.findUniqueOrThrow({
+      where: { tenantId: requireTenantId() },
     });
     const fromEmail =
-      vendor.fromEmail ?? process.env.EMAIL_DEFAULT_FROM ?? undefined;
+      settings.fromEmail ?? process.env.EMAIL_DEFAULT_FROM ?? undefined;
     if (!fromEmail?.trim()) {
       throw new BadRequestException(
         "Configure a from email address in Settings before sending",
       );
     }
-    if (!vendor.vendorPhysicalAddress?.trim()) {
+    if (!settings.vendorPhysicalAddress?.trim()) {
       throw new BadRequestException(
         "Configure a vendor physical address in Settings before sending",
       );
@@ -70,15 +75,15 @@ export class InvoiceEmailService {
 
     const today = new Date();
     const dueDate = invoice.dueDate.toISOString().slice(0, 10);
-    const daysBehind = computeDaysBehind(dueDate, today, vendor.timezone);
+    const daysBehind = computeDaysBehind(dueDate, today, settings.timezone);
 
     let tier = getNextTier(
       daysBehind,
       invoice.lastTierSent,
-      vendor.overdueTiers,
+      settings.overdueTiers,
     );
     if (tier === null) {
-      const sorted = [...vendor.overdueTiers].sort((a, b) => a - b);
+      const sorted = [...settings.overdueTiers].sort((a, b) => a - b);
       const minTier = sorted[0];
       if (minTier === undefined || daysBehind < minTier) {
         throw new BadRequestException(
@@ -102,9 +107,9 @@ export class InvoiceEmailService {
       daysBehind,
       notificationNumber: invoice.notificationNumber + 1,
       comments: invoice.comments,
-      includeComments: vendor.includeCommentsInEmail,
-      vendorName: vendor.vendorName ?? undefined,
-      vendorPhysicalAddress: vendor.vendorPhysicalAddress,
+      includeComments: settings.includeCommentsInEmail,
+      vendorName: settings.vendorName ?? undefined,
+      vendorPhysicalAddress: settings.vendorPhysicalAddress,
       unsubscribeUrl: buildUnsubscribeUrl(invoice.invoiceNumber),
     };
 
@@ -121,9 +126,9 @@ export class InvoiceEmailService {
       text,
       from: {
         email: fromEmail,
-        name: vendor.fromName ?? vendor.vendorName ?? undefined,
+        name: settings.fromName ?? settings.vendorName ?? undefined,
       },
-      replyTo: vendor.replyToEmail ?? undefined,
+      replyTo: settings.replyToEmail ?? undefined,
       headers: {
         "List-Unsubscribe": `<${templateData.unsubscribeUrl}>`,
       },
@@ -168,7 +173,7 @@ export class InvoiceEmailService {
     });
 
     const updated = await this.prisma.invoice.findUniqueOrThrow({
-      where: { invoiceNumber },
+      where: tenantInvoiceUnique(invoiceNumber),
     });
 
     return {
@@ -184,7 +189,7 @@ export class InvoiceEmailService {
     tier: number,
   ): Promise<MilestoneTemplateContent | undefined> {
     const row = await this.prisma.reminderMilestoneTemplate.findUnique({
-      where: { tierDays: tier },
+      where: tenantMilestoneUnique(tier),
     });
     if (!row?.isCustom) {
       return undefined;

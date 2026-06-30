@@ -2,9 +2,13 @@ import { BadRequestException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 import { VendorSettingsService } from "./vendor-settings.service";
 
+vi.mock("../tenancy/tenant-context", () => ({
+  requireTenantId: () => "tenant-test-id",
+}));
+
 describe("VendorSettingsService", () => {
   const baseSettings = {
-    id: "default",
+    tenantId: "tenant-test-id",
     timezone: "America/New_York",
     vendorName: "Tarema LLC",
     vendorPhysicalAddress: "123 Main St",
@@ -21,8 +25,8 @@ describe("VendorSettingsService", () => {
   }) {
     const settings = { ...baseSettings, ...overrides?.settings };
     const prisma = {
-      vendorSettings: {
-        findFirstOrThrow: vi.fn().mockResolvedValue(settings),
+      tenantSettings: {
+        findUniqueOrThrow: vi.fn().mockResolvedValue(settings),
         update: vi.fn().mockResolvedValue({
           ...settings,
           emailVerifiedAt: new Date("2026-06-20T12:00:00.000Z"),
@@ -59,9 +63,9 @@ describe("VendorSettingsService", () => {
         from: { email: "taremamllc@gmail.com", name: "Tarema LLC" },
       }),
     );
-    expect(prisma.vendorSettings.update).toHaveBeenCalledWith(
+    expect(prisma.tenantSettings.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: "default" },
+        where: { tenantId: "tenant-test-id" },
         data: expect.objectContaining({ emailVerifiedAt: expect.any(Date) }),
       }),
     );

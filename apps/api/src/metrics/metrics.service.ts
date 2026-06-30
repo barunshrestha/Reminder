@@ -1,25 +1,27 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { tenantFilter } from "../tenancy/tenant-scope";
 
 @Injectable()
 export class MetricsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getSummary() {
+    const tenantWhere = tenantFilter();
     const [open, paid, closed, active, optedOut, emailsSent, emailsFailed, docsGenerated, bulkEvents] =
       await Promise.all([
-        this.prisma.invoice.count({ where: { status: "open" } }),
-        this.prisma.invoice.count({ where: { status: "paid" } }),
-        this.prisma.invoice.count({ where: { status: "closed" } }),
-        this.prisma.invoice.count({ where: { isActive: true } }),
-        this.prisma.invoice.count({ where: { emailOptOut: true } }),
-        this.prisma.auditEvent.count({ where: { eventType: "email.sent" } }),
-        this.prisma.auditEvent.count({ where: { eventType: "email.failed" } }),
+        this.prisma.invoice.count({ where: { ...tenantWhere, status: "open" } }),
+        this.prisma.invoice.count({ where: { ...tenantWhere, status: "paid" } }),
+        this.prisma.invoice.count({ where: { ...tenantWhere, status: "closed" } }),
+        this.prisma.invoice.count({ where: { ...tenantWhere, isActive: true } }),
+        this.prisma.invoice.count({ where: { ...tenantWhere, emailOptOut: true } }),
+        this.prisma.auditEvent.count({ where: { ...tenantWhere, eventType: "email.sent" } }),
+        this.prisma.auditEvent.count({ where: { ...tenantWhere, eventType: "email.failed" } }),
         this.prisma.auditEvent.count({
-          where: { eventType: "document.generated" },
+          where: { ...tenantWhere, eventType: "document.generated" },
         }),
         this.prisma.auditEvent.findMany({
-          where: { eventType: "integration.bulk_upsert" },
+          where: { ...tenantWhere, eventType: "integration.bulk_upsert" },
           orderBy: { createdAt: "desc" },
           take: 20,
         }),

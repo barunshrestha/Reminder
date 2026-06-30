@@ -4,6 +4,8 @@ import { AuditService } from "../audit/audit.service";
 import { InvoiceChangeLogService } from "./invoice-change-log.service";
 import { snapshotFromInvoice } from "./invoice-snapshot.util";
 import { PrismaService } from "../prisma/prisma.service";
+import { requireTenantId } from "../tenancy/tenant-context";
+import { tenantFilter } from "../tenancy/tenant-scope";
 import type { PatchVendorInvoiceDto } from "./dto/patch-invoice.dto";
 
 @Injectable()
@@ -15,7 +17,7 @@ export class InvoicesService {
   ) {}
 
   findAll(params?: { status?: string; send_reminder?: string }) {
-    const where: Prisma.InvoiceWhereInput = {};
+    const where: Prisma.InvoiceWhereInput = { ...tenantFilter() };
     if (params?.status && isInvoiceStatus(params.status)) {
       where.status = params.status;
     }
@@ -33,8 +35,9 @@ export class InvoicesService {
   }
 
   async findOne(invoiceNumber: string) {
+    const tenantId = requireTenantId();
     const invoice = await this.prisma.invoice.findUnique({
-      where: { invoiceNumber },
+      where: { tenantId_invoiceNumber: { tenantId, invoiceNumber } },
       include: {
         notificationDocuments: { orderBy: { generatedAt: "desc" }, take: 10 },
         tierNotifications: { orderBy: { tier: "asc" } },
@@ -98,8 +101,9 @@ export class InvoicesService {
       }
     }
 
+    const tenantId = requireTenantId();
     const updated = await this.prisma.invoice.update({
-      where: { invoiceNumber },
+      where: { tenantId_invoiceNumber: { tenantId, invoiceNumber } },
       data,
     });
 

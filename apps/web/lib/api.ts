@@ -1,6 +1,82 @@
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000/api/v1";
 
+const TENANT_ID_KEY = "active_tenant_id";
+const TENANT_SLUG_KEY = "active_tenant_slug";
+
+export function getStoredTenantId(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(TENANT_ID_KEY);
+}
+
+export function setStoredTenant(tenantId: string, slug?: string) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(TENANT_ID_KEY, tenantId);
+  if (slug) {
+    localStorage.setItem(TENANT_SLUG_KEY, slug);
+  }
+}
+
+export function clearStoredTenant() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(TENANT_ID_KEY);
+  localStorage.removeItem(TENANT_SLUG_KEY);
+  tenantSyncedFromSession = false;
+}
+
+function tenantHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const tenantId = getStoredTenantId();
+  const tenantSlug =
+    typeof window === "undefined"
+      ? null
+      : localStorage.getItem(TENANT_SLUG_KEY);
+  if (tenantId) headers["x-tenant-id"] = tenantId;
+  if (tenantSlug) headers["x-tenant-slug"] = tenantSlug;
+  return headers;
+}
+
+let tenantBootstrap: Promise<void> | null = null;
+let tenantSyncedFromSession = false;
+
+async function ensureTenantHeaders(): Promise<void> {
+  if (typeof window === "undefined" || tenantSyncedFromSession) {
+    return;
+  }
+  if (!tenantBootstrap) {
+    tenantBootstrap = fetch(`${API_BASE}/auth/me`, {
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          return;
+        }
+        const result = (await res.json()) as {
+          user: { tenantId?: string; tenantSlug?: string };
+        };
+        if (result.user.tenantId) {
+          setStoredTenant(result.user.tenantId, result.user.tenantSlug);
+        }
+        tenantSyncedFromSession = true;
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        tenantBootstrap = null;
+      });
+  }
+  await tenantBootstrap;
+}
+
+function skipsTenantBootstrap(path: string): boolean {
+  return (
+    path === "/auth/login" ||
+    path === "/auth/register" ||
+    path === "/auth/config" ||
+    path.startsWith("/auth/oidc")
+  );
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -14,11 +90,15 @@ export async function api<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
+  if (typeof window !== "undefined" && !skipsTenantBootstrap(path)) {
+    await ensureTenantHeaders();
+  }
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
+      ...tenantHeaders(),
       ...(options.headers ?? {}),
     },
   });
@@ -36,19 +116,67 @@ export async function api<T>(
   return res.text() as Promise<T>;
 }
 
-export async function login(email: string, password: string) {
-  return api<{ user: { email: string; role: string } }>("/auth/login", {
+export async function login(email: string, password: string, tenantId?: string) {
+  const result = await api<{
+    user: { email: string };
+    tenantId?: string;
+    tenantSlug?: string;
+    mfaRequired?: boolean;
+  }>("/auth/login", {
     method: "POST",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, tenant_id: tenantId }),
   });
+  if (result.tenantId) {
+    setStoredTenant(result.tenantId, result.tenantSlug);
+    tenantSyncedFromSession = true;
+  }
+  return result;
 }
 
 export async function logout() {
+  clearStoredTenant();
   return api("/auth/logout", { method: "POST" });
 }
 
 export async function me() {
-  return api<{ user: { email: string; role: string } }>("/auth/me");
+  return api<{
+    user: {
+      email: string;
+      role?: "admin" | "operator";
+      tenantId?: string;
+      tenantSlug?: string;
+    };
+  }>("/auth/me");
+}
+
+export async function listMyTenants() {
+  return api<
+    Array<{
+      tenantId: string;
+      role: string;
+      tenant: { id: string; name: string; slug: string; subdomain: string };
+    }>
+  >("/accounts/tenants");
+}
+
+export async function onboardAccount(data: {
+  account_name: string;
+  tenant_name: string;
+  subdomain: string;
+  plan_code?: string;
+}) {
+  return api<{ tenantId: string; slug: string; subdomain: string }>(
+    "/accounts/onboard",
+    { method: "POST", body: JSON.stringify(data) },
+  );
+}
+
+export async function getBillingSubscription() {
+  return api("/billing/subscription");
+}
+
+export async function getBillingUsage() {
+  return api("/billing/usage");
 }
 
 export type VendorSettings = {
@@ -620,5 +748,65 @@ export async function previewReminderTemplate(data: {
   return api<ReminderTemplatePreview>("/reminder-templates/preview", {
     method: "POST",
     body: JSON.stringify(data),
+  });
+}
+
+export type AuthConfig = {
+  oidcEnabled: boolean;
+  passwordLoginEnabled: boolean;
+};
+
+export async function getAuthConfig() {
+  return api<AuthConfig>("/auth/config");
+}
+
+export function ssoLoginUrl() {
+  return `${API_BASE}/auth/oidc/login`;
+}
+
+export type NotificationPreferences = {
+  pushEnabled: boolean;
+  importFailures: boolean;
+  reminderRunFailures: boolean;
+  pushConfigured: boolean;
+  subscriptionCount: number;
+};
+
+export async function getVapidPublicKey() {
+  return api<{ publicKey: string | null }>("/notifications/vapid-public-key");
+}
+
+export async function getNotificationPreferences() {
+  return api<NotificationPreferences>("/notifications/preferences");
+}
+
+export async function updateNotificationPreferences(
+  data: Partial<
+    Pick<
+      NotificationPreferences,
+      "pushEnabled" | "importFailures" | "reminderRunFailures"
+    >
+  >,
+) {
+  return api<NotificationPreferences>("/notifications/preferences", {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function subscribePush(input: {
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
+}) {
+  return api<{ ok: boolean }>("/notifications/push-subscribe", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function unsubscribePush(input: { endpoint?: string }) {
+  return api<{ ok: boolean }>("/notifications/push-subscribe", {
+    method: "DELETE",
+    body: JSON.stringify(input),
   });
 }

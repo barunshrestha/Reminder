@@ -20,7 +20,7 @@ enum ReminderDeliveryMode {
   na
 }
 
-enum UserRole {
+enum TenantRole {
   admin
   operator
 }
@@ -70,58 +70,410 @@ enum InvoiceChangeAction {
   deleted
 }
 
-model User {
-  id           String   @id @default(uuid()) @db.Uuid
-  email        String   @unique
-  passwordHash String   @map("password_hash")
-  role         UserRole @default(operator)
-  createdAt    DateTime @default(now()) @map("created_at")
+enum Region {
+  us_east
+  us_west
+  eu_west
+  ap_southeast
+}
+
+enum TenantStatus {
+  active
+  suspended
+  pending
+  deleted
+}
+
+enum SubscriptionStatus {
+  trialing
+  active
+  past_due
+  canceled
+  unpaid
+}
+
+enum BillingInterval {
+  monthly
+  yearly
+}
+
+enum CustomDomainStatus {
+  pending
+  verified
+  failed
+}
+
+enum ExportJobStatus {
+  pending
+  running
+  completed
+  failed
+}
+
+enum AccountRole {
+  owner
+  admin
+  member
+}
+
+enum AuthTokenType {
+  magic_link
+  password_reset
+  email_verify
+}
+
+model Account {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenants       Tenant[]
+  memberships   AccountMembership[]
+  subscriptions Subscription[]
+
+  @@map("accounts")
+}
+
+model Tenant {
+  id        String       @id @default(uuid()) @db.Uuid
+  accountId String       @map("account_id") @db.Uuid
+  name      String
+  slug      String       @unique
+  subdomain String       @unique
+  status    TenantStatus @default(active)
+  region    Region       @default(us_east)
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+
+  account                Account                     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  settings               TenantSettings?
+  branding               TenantBranding?
+  emailConfig            TenantEmailConfig?
+  customDomains          TenantCustomDomain[]
+  exportJobs             TenantExportJob[]
+  memberships            TenantMembership[]
+  usageCounters          UsageCounter[]
+  invites                UserInvite[]
+  invoices               Invoice[]
+  schedules              Schedule[]
+  connectors             Connector[]
+  mappingProfiles          MappingProfile[]
+  importBatches          ImportBatch[]
+  apiKeys                ApiKey[]
+  auditEvents            AuditEvent[]
+  milestoneTemplates     ReminderMilestoneTemplate[]
+  spreadsheetUploads     SpreadsheetUpload[]
+  invoiceScanUploads     InvoiceScanUpload[]
+  optOutEvents           OptOutEvent[]
+  integrationIdempotency IntegrationIdempotency[]
+  impersonationSessions  ImpersonationSession[]
+
+  @@index([accountId])
+  @@map("tenants")
+}
+
+model AccountMembership {
+  id        String      @id @default(uuid()) @db.Uuid
+  accountId String      @map("account_id") @db.Uuid
+  userId    String      @map("user_id") @db.Uuid
+  role      AccountRole @default(member)
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, userId])
+  @@map("account_memberships")
+}
+
+model TenantMembership {
+  id        String     @id @default(uuid()) @db.Uuid
+  tenantId  String     @map("tenant_id") @db.Uuid
+  userId    String     @map("user_id") @db.Uuid
+  role      TenantRole @default(operator)
+  createdAt DateTime   @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@map("tenant_memberships")
+}
+
+model Plan {
+  id                   String   @id @default(uuid()) @db.Uuid
+  code                 String   @unique
+  name                 String
+  stripePriceIdMonthly String?  @map("stripe_price_id_monthly")
+  stripePriceIdYearly  String?  @map("stripe_price_id_yearly")
+  invoiceLimit         Int      @default(1000) @map("invoice_limit")
+  scheduleLimit        Int      @default(5) @map("schedule_limit")
+  connectorLimit       Int      @default(2) @map("connector_limit")
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  subscriptions Subscription[]
+
+  @@map("plans")
+}
+
+model Subscription {
+  id                   String             @id @default(uuid()) @db.Uuid
+  accountId            String             @map("account_id") @db.Uuid
+  planId               String             @map("plan_id") @db.Uuid
+  status               SubscriptionStatus @default(trialing)
+  billingInterval      BillingInterval    @default(monthly) @map("billing_interval")
+  stripeCustomerId     String?            @map("stripe_customer_id")
+  stripeSubscriptionId String?            @unique @map("stripe_subscription_id")
+  currentPeriodStart   DateTime?          @map("current_period_start")
+  currentPeriodEnd     DateTime?          @map("current_period_end")
+  cancelAtPeriodEnd    Boolean            @default(false) @map("cancel_at_period_end")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  plan    Plan    @relation(fields: [planId], references: [id])
+
+  @@index([accountId])
+  @@map("subscriptions")
+}
+
+model UsageCounter {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  metric    String
+  period    String
+  count     Int      @default(0)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, metric, period])
+  @@map("usage_counters")
+}
+
+model TenantSettings {
+  tenantId                  String    @id @map("tenant_id") @db.Uuid
+  timezone                  String    @default("America/New_York")
+  overdueTiers              Int[]     @default([15, 30, 45, 60]) @map("overdue_tiers")
+  missedSyncsBeforeInactive Int       @default(2) @map("missed_syncs_before_inactive")
+  includeCommentsInEmail    Boolean   @default(false) @map("include_comments_in_email")
+  vendorPhysicalAddress     String?   @map("vendor_physical_address")
+  vendorName                String?   @map("vendor_name")
+  fromEmail                 String?   @map("from_email")
+  fromName                  String?   @map("from_name")
+  replyToEmail              String?   @map("reply_to_email")
+  emailVerifiedAt           DateTime? @map("email_verified_at")
+  digestEmailEnabled        Boolean   @default(false) @map("digest_email_enabled")
+  defaultPaymentTermsDays   Int       @default(30) @map("default_payment_terms_days")
+  remindersEnabled          Boolean   @default(true) @map("reminders_enabled")
+  processingPreset          String    @default("daily") @map("processing_preset")
+  processingRunHour         Int       @default(8) @map("processing_run_hour")
+  processingWeeklyDay       Int       @default(1) @map("processing_weekly_day")
+  createdAt                 DateTime  @default(now()) @map("created_at")
+  updatedAt                 DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_settings")
+}
+
+model TenantBranding {
+  tenantId     String   @id @map("tenant_id") @db.Uuid
+  logoUrl      String?  @map("logo_url")
+  primaryColor String?  @map("primary_color")
+  accentColor  String?  @map("accent_color")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  spreadsheetUploads SpreadsheetUpload[]
-  invoiceScanUploads InvoiceScanUpload[]
-  importBatches      ImportBatch[]
-  resolvedImportRows ImportRow[]
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_branding")
+}
+
+model TenantEmailConfig {
+  tenantId    String   @id @map("tenant_id") @db.Uuid
+  smtpHost    String   @map("smtp_host")
+  smtpPort    Int      @default(587) @map("smtp_port")
+  smtpUser    String   @map("smtp_user")
+  smtpPassEnc String   @map("smtp_pass_enc")
+  fromEmail   String   @map("from_email")
+  fromName    String?  @map("from_name")
+  verified    Boolean  @default(false)
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_email_configs")
+}
+
+model TenantCustomDomain {
+  id         String             @id @default(uuid()) @db.Uuid
+  tenantId   String             @map("tenant_id") @db.Uuid
+  domain     String
+  status     CustomDomainStatus @default(pending)
+  verifiedAt DateTime?          @map("verified_at")
+  createdAt  DateTime           @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, domain])
+  @@map("tenant_custom_domains")
+}
+
+model TenantExportJob {
+  id           String          @id @default(uuid()) @db.Uuid
+  tenantId     String          @map("tenant_id") @db.Uuid
+  status       ExportJobStatus @default(pending)
+  format       String          @default("csv")
+  storageKey   String?         @map("storage_key")
+  errorMessage String?         @map("error_message")
+  createdAt    DateTime        @default(now()) @map("created_at")
+  completedAt  DateTime?       @map("completed_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("tenant_export_jobs")
+}
+
+model UserInvite {
+  id              String     @id @default(uuid()) @db.Uuid
+  tenantId        String     @map("tenant_id") @db.Uuid
+  email           String
+  role            TenantRole @default(operator)
+  tokenHash       String     @map("token_hash")
+  expiresAt       DateTime   @map("expires_at")
+  invitedByUserId String?    @map("invited_by_user_id") @db.Uuid
+  acceptedAt      DateTime?  @map("accepted_at")
+  createdAt       DateTime   @default(now()) @map("created_at")
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invitedBy User?  @relation("UserInvitesSent", fields: [invitedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, email])
+  @@map("user_invites")
+}
+
+model PlatformAdmin {
+  userId    String   @id @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("platform_admins")
+}
+
+model ImpersonationSession {
+  id             String    @id @default(uuid()) @db.Uuid
+  adminUserId    String    @map("admin_user_id") @db.Uuid
+  targetTenantId String    @map("target_tenant_id") @db.Uuid
+  targetUserId   String    @map("target_user_id") @db.Uuid
+  startedAt      DateTime  @default(now()) @map("started_at")
+  endedAt        DateTime? @map("ended_at")
+
+  adminUser    User   @relation("ImpersonationAdmin", fields: [adminUserId], references: [id], onDelete: Cascade)
+  targetTenant Tenant @relation(fields: [targetTenantId], references: [id], onDelete: Cascade)
+  targetUser   User   @relation("ImpersonationTarget", fields: [targetUserId], references: [id], onDelete: Cascade)
+
+  @@map("impersonation_sessions")
+}
+
+model StripeWebhookEvent {
+  id            String    @id @default(uuid()) @db.Uuid
+  stripeEventId String    @unique @map("stripe_event_id")
+  type          String
+  payload       Json
+  processedAt   DateTime? @map("processed_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@map("stripe_webhook_events")
+}
+
+model AuthToken {
+  id        String        @id @default(uuid()) @db.Uuid
+  userId    String        @map("user_id") @db.Uuid
+  type      AuthTokenType
+  tokenHash String        @map("token_hash")
+  expiresAt DateTime      @map("expires_at")
+  usedAt    DateTime?     @map("used_at")
+  createdAt DateTime      @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tokenHash])
+  @@map("auth_tokens")
+}
+
+model User {
+  id              String    @id @default(uuid()) @db.Uuid
+  email           String    @unique
+  passwordHash    String?   @map("password_hash")
+  ssoSubject      String?   @unique @map("sso_subject")
+  ssoProvider     String?   @map("sso_provider")
+  emailVerifiedAt DateTime? @map("email_verified_at")
+  mfaEnabled      Boolean   @default(false) @map("mfa_enabled")
+  mfaSecret       String?   @map("mfa_secret")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  spreadsheetUploads    SpreadsheetUpload[]
+  invoiceScanUploads    InvoiceScanUpload[]
+  importBatches         ImportBatch[]
+  resolvedImportRows    ImportRow[]
+  pushSubscriptions     PushSubscription[]
+  notificationPreference UserNotificationPreference?
+  accountMemberships    AccountMembership[]
+  tenantMemberships     TenantMembership[]
+  invitesSent           UserInvite[]              @relation("UserInvitesSent")
+  platformAdmin         PlatformAdmin?
+  impersonationsAsAdmin ImpersonationSession[]    @relation("ImpersonationAdmin")
+  impersonationsAsTarget ImpersonationSession[]   @relation("ImpersonationTarget")
+  authTokens            AuthToken[]
 
   @@map("users")
 }
 
-model VendorSettings {
-  id                        String   @id @default("default")
-  timezone                  String   @default("America/New_York")
-  overdueTiers              Int[]    @default([15, 30, 45, 60]) @map("overdue_tiers")
-  missedSyncsBeforeInactive Int      @default(2) @map("missed_syncs_before_inactive")
-  includeCommentsInEmail    Boolean  @default(false) @map("include_comments_in_email")
-  vendorPhysicalAddress     String?  @map("vendor_physical_address")
-  vendorName                String?  @map("vendor_name")
-  fromEmail                 String?  @map("from_email")
-  fromName                  String?  @map("from_name")
-  replyToEmail              String?  @map("reply_to_email")
-  emailVerifiedAt           DateTime? @map("email_verified_at")
-  digestEmailEnabled        Boolean  @default(false) @map("digest_email_enabled")
-  defaultPaymentTermsDays   Int      @default(30) @map("default_payment_terms_days")
-  remindersEnabled          Boolean  @default(true) @map("reminders_enabled")
-  processingPreset          String   @default("daily") @map("processing_preset")
-  processingRunHour         Int      @default(8) @map("processing_run_hour")
-  processingWeeklyDay       Int      @default(1) @map("processing_weekly_day")
-  createdAt                 DateTime @default(now()) @map("created_at")
-  updatedAt                 DateTime @updatedAt @map("updated_at")
+model PushSubscription {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@map("vendor_settings")
+  @@index([userId])
+  @@map("push_subscriptions")
+}
+
+model UserNotificationPreference {
+  userId              String  @id @map("user_id") @db.Uuid
+  pushEnabled         Boolean @default(false) @map("push_enabled")
+  importFailures      Boolean @default(true) @map("import_failures")
+  reminderRunFailures Boolean @default(true) @map("reminder_run_failures")
+  user                User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_notification_preferences")
 }
 
 model ReminderMilestoneTemplate {
-  tierDays  Int      @id @map("tier_days")
+  tenantId  String   @map("tenant_id") @db.Uuid
+  tierDays  Int      @map("tier_days")
   subject   String
   bodyHtml  String   @map("body_html")
   isCustom  Boolean  @default(true) @map("is_custom")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@id([tenantId, tierDays])
   @@map("reminder_milestone_templates")
 }
 
 model Connector {
   id             String    @id @default(uuid()) @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
   name           String
   enabled        Boolean   @default(true)
   sqlQuery       String    @map("sql_query")
@@ -132,52 +484,59 @@ model Connector {
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   importBatches ImportBatch[]
 
+  @@index([tenantId])
   @@map("connectors")
 }
 
 model MappingProfile {
-  id          String   @id @default(uuid()) @db.Uuid
-  name        String
-  columnMap   Json     @map("column_map")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String
+  columnMap Json     @map("column_map")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
+  tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   spreadsheetUploads SpreadsheetUpload[]
 
+  @@index([tenantId])
   @@map("mapping_profiles")
 }
 
 model Invoice {
-  id                    String               @id @default(uuid()) @db.Uuid
-  clientName            String               @map("client_name")
-  invoiceNumber         String               @unique @map("invoice_number")
-  totalAmount           Decimal              @map("total_amount") @db.Decimal(12, 2)
-  balanceDue            Decimal              @map("balance_due") @db.Decimal(12, 2)
-  dueDate               DateTime             @map("due_date") @db.Date
-  dateOfService         DateTime?            @map("date_of_service") @db.Date
-  services              Json?
-  notificationNumber    Int                  @default(0) @map("notification_number")
-  clientEmail           String?              @map("client_email")
-  clientPhone           String?              @map("client_phone")
-  comments              String?
-  sendReminder          Boolean              @default(true) @map("send_reminder")
-  externalClientId      String?              @map("external_client_id")
-  status                InvoiceStatus        @default(open)
-  paidAt                DateTime?            @map("paid_at")
-  lastTierSent          Int?                 @map("last_tier_sent")
-  lastReminderSentAt    DateTime?            @map("last_reminder_sent_at")
-  missedSyncCount       Int                  @default(0) @map("missed_sync_count")
-  contentHash           String               @map("content_hash") @db.VarChar(64)
-  lastSeenAt            DateTime?            @map("last_seen_at")
-  isActive              Boolean              @default(true) @map("is_active")
-  emailOptOut           Boolean              @default(false) @map("email_opt_out")
-  consentEmail          Boolean              @default(true) @map("consent_email")
-  reminderDeliveryMode  ReminderDeliveryMode @default(email) @map("reminder_delivery_mode")
-  createdAt             DateTime             @default(now()) @map("created_at")
-  updatedAt             DateTime             @updatedAt @map("updated_at")
+  id                   String               @id @default(uuid()) @db.Uuid
+  tenantId             String               @map("tenant_id") @db.Uuid
+  clientName           String               @map("client_name")
+  invoiceNumber        String               @map("invoice_number")
+  totalAmount          Decimal              @map("total_amount") @db.Decimal(12, 2)
+  balanceDue           Decimal              @map("balance_due") @db.Decimal(12, 2)
+  dueDate              DateTime             @map("due_date") @db.Date
+  dateOfService        DateTime?            @map("date_of_service") @db.Date
+  services             Json?
+  notificationNumber   Int                  @default(0) @map("notification_number")
+  clientEmail          String?              @map("client_email")
+  clientPhone          String?              @map("client_phone")
+  comments             String?
+  sendReminder         Boolean              @default(true) @map("send_reminder")
+  externalClientId     String?              @map("external_client_id")
+  status               InvoiceStatus        @default(open)
+  paidAt               DateTime?            @map("paid_at")
+  lastTierSent         Int?                 @map("last_tier_sent")
+  lastReminderSentAt   DateTime?            @map("last_reminder_sent_at")
+  missedSyncCount      Int                  @default(0) @map("missed_sync_count")
+  contentHash          String               @map("content_hash") @db.VarChar(64)
+  lastSeenAt           DateTime?            @map("last_seen_at")
+  isActive             Boolean              @default(true) @map("is_active")
+  emailOptOut          Boolean              @default(false) @map("email_opt_out")
+  consentEmail         Boolean              @default(true) @map("consent_email")
+  reminderDeliveryMode ReminderDeliveryMode @default(email) @map("reminder_delivery_mode")
+  createdAt            DateTime             @default(now()) @map("created_at")
+  updatedAt            DateTime             @updatedAt @map("updated_at")
 
+  tenant                Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   notificationDocuments NotificationDocument[]
   tierNotifications     TierNotification[]
   spreadsheetUploads    SpreadsheetUploadInvoice[]
@@ -185,10 +544,11 @@ model Invoice {
   importRows            ImportRow[]
   changeLogs            InvoiceChangeLog[]
 
-  @@unique([externalClientId, invoiceNumber])
-  @@index([dueDate])
-  @@index([sendReminder])
-  @@index([status])
+  @@unique([tenantId, invoiceNumber])
+  @@unique([tenantId, externalClientId, invoiceNumber])
+  @@index([tenantId, dueDate])
+  @@index([tenantId, sendReminder])
+  @@index([tenantId, status])
   @@index([contentHash])
   @@map("invoices")
 }
@@ -210,6 +570,7 @@ model NotificationDocument {
 
 model Schedule {
   id                    String   @id @default(uuid()) @db.Uuid
+  tenantId              String   @map("tenant_id") @db.Uuid
   name                  String
   cronExpression        String?  @map("cron_expression")
   rrule                 String?
@@ -220,8 +581,10 @@ model Schedule {
   createdAt             DateTime @default(now()) @map("created_at")
   updatedAt             DateTime @updatedAt @map("updated_at")
 
-  runs ScheduleRun[]
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  runs   ScheduleRun[]
 
+  @@index([tenantId])
   @@map("schedules")
 }
 
@@ -256,17 +619,21 @@ model TierNotification {
 
 model AuditEvent {
   id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
   eventType String   @map("event_type")
   payload   Json
   createdAt DateTime @default(now()) @map("created_at")
 
-  @@index([eventType])
-  @@index([createdAt])
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, eventType])
+  @@index([tenantId, createdAt])
   @@map("audit_events")
 }
 
 model ApiKey {
   id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @map("tenant_id") @db.Uuid
   name       String
   keyPrefix  String    @map("key_prefix")
   keyHash    String    @unique @map("key_hash")
@@ -274,39 +641,48 @@ model ApiKey {
   revokedAt  DateTime? @map("revoked_at")
   createdAt  DateTime  @default(now()) @map("created_at")
 
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   importBatches ImportBatch[]
   changeLogs    InvoiceChangeLog[]
 
+  @@index([tenantId])
   @@map("api_keys")
 }
 
 model IntegrationIdempotency {
   id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
   idempotencyKey String   @map("idempotency_key")
   route          String
   response       Json
   createdAt      DateTime @default(now()) @map("created_at")
   expiresAt      DateTime @map("expires_at")
 
-  @@unique([idempotencyKey, route])
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, idempotencyKey, route])
   @@index([expiresAt])
   @@map("integration_idempotency")
 }
 
 model OptOutEvent {
   id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
   email         String
   invoiceNumber String?  @map("invoice_number")
   source        String   @default("unsubscribe_link")
   createdAt     DateTime @default(now()) @map("created_at")
 
-  @@index([email])
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, email])
   @@map("opt_out_events")
 }
 
 model SpreadsheetUpload {
   id                String   @id @default(uuid()) @db.Uuid
-  originalFilename  String   @unique @map("original_filename")
+  tenantId          String   @map("tenant_id") @db.Uuid
+  originalFilename  String   @map("original_filename")
   storedPath        String   @map("stored_path")
   mappingProfileId  String   @map("mapping_profile_id") @db.Uuid
   columnMapSnapshot Json     @map("column_map_snapshot")
@@ -314,11 +690,14 @@ model SpreadsheetUpload {
   uploadedByUserId  String?  @map("uploaded_by_user_id") @db.Uuid
   createdAt         DateTime @default(now()) @map("created_at")
 
+  tenant         Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   mappingProfile MappingProfile             @relation(fields: [mappingProfileId], references: [id])
   uploadedBy     User?                      @relation(fields: [uploadedByUserId], references: [id])
   invoices       SpreadsheetUploadInvoice[]
   importBatches  ImportBatch[]
 
+  @@unique([tenantId, originalFilename])
+  @@index([tenantId])
   @@map("spreadsheet_uploads")
 }
 
@@ -339,6 +718,7 @@ model SpreadsheetUploadInvoice {
 
 model InvoiceScanUpload {
   id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
   originalFilename String   @map("original_filename")
   storedPath       String   @map("stored_path")
   mimeType         String   @map("mime_type")
@@ -348,10 +728,12 @@ model InvoiceScanUpload {
   uploadedByUserId String?  @map("uploaded_by_user_id") @db.Uuid
   createdAt        DateTime @default(now()) @map("created_at")
 
+  tenant        Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   uploadedBy    User?                      @relation(fields: [uploadedByUserId], references: [id])
   invoices      InvoiceScanUploadInvoice[]
   importBatches ImportBatch[]
 
+  @@index([tenantId])
   @@map("invoice_scan_uploads")
 }
 
@@ -372,6 +754,7 @@ model InvoiceScanUploadInvoice {
 
 model ImportBatch {
   id                  String            @id @default(uuid()) @db.Uuid
+  tenantId            String            @map("tenant_id") @db.Uuid
   source              ImportSource
   status              ImportBatchStatus @default(analyzing)
   spreadsheetUploadId String?           @map("spreadsheet_upload_id") @db.Uuid
@@ -382,6 +765,7 @@ model ImportBatch {
   stats               Json?
   createdAt           DateTime          @default(now()) @map("created_at")
 
+  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   spreadsheetUpload SpreadsheetUpload? @relation(fields: [spreadsheetUploadId], references: [id], onDelete: SetNull)
   scanUpload        InvoiceScanUpload? @relation(fields: [scanUploadId], references: [id], onDelete: SetNull)
   connector         Connector?         @relation(fields: [connectorId], references: [id], onDelete: SetNull)
@@ -389,34 +773,34 @@ model ImportBatch {
   createdBy         User?              @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
   rows              ImportRow[]
 
-  @@index([status])
-  @@index([source])
+  @@index([tenantId, status])
+  @@index([tenantId, source])
   @@map("import_batches")
 }
 
 model ImportRow {
-  id                String            @id @default(uuid()) @db.Uuid
-  batchId           String            @map("batch_id") @db.Uuid
-  rowNumber         Int               @map("row_number")
-  invoiceNumber     String            @map("invoice_number")
-  invoiceId         String?           @map("invoice_id") @db.Uuid
-  rawPayload        Json              @map("raw_payload")
-  mappedPayload     Json              @map("mapped_payload")
-  status            ImportRowStatus
-  existingSnapshot  Json?             @map("existing_snapshot")
-  changedFields     String[]          @default([]) @map("changed_fields")
-  resolution        ImportResolution? @map("resolution")
-  resolvedByUserId  String?           @map("resolved_by_user_id") @db.Uuid
-  resolvedAt        DateTime?         @map("resolved_at")
-  errorMessage      String?           @map("error_message")
-  createdAt         DateTime          @default(now()) @map("created_at")
+  id               String            @id @default(uuid()) @db.Uuid
+  batchId          String            @map("batch_id") @db.Uuid
+  rowNumber        Int               @map("row_number")
+  invoiceNumber    String            @map("invoice_number")
+  invoiceId        String?           @map("invoice_id") @db.Uuid
+  rawPayload       Json              @map("raw_payload")
+  mappedPayload    Json              @map("mapped_payload")
+  status           ImportRowStatus
+  existingSnapshot Json?             @map("existing_snapshot")
+  changedFields    String[]          @default([]) @map("changed_fields")
+  resolution       ImportResolution? @map("resolution")
+  resolvedByUserId String?           @map("resolved_by_user_id") @db.Uuid
+  resolvedAt       DateTime?         @map("resolved_at")
+  errorMessage     String?           @map("error_message")
+  createdAt        DateTime          @default(now()) @map("created_at")
 
-  batch                  ImportBatch               @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  invoice                Invoice?                  @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-  resolvedBy             User?                     @relation(fields: [resolvedByUserId], references: [id], onDelete: SetNull)
-  spreadsheetUploadLink  SpreadsheetUploadInvoice?
-  scanUploadLink         InvoiceScanUploadInvoice?
-  changeLogs             InvoiceChangeLog[]
+  batch                 ImportBatch               @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  invoice               Invoice?                  @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  resolvedBy            User?                     @relation(fields: [resolvedByUserId], references: [id], onDelete: SetNull)
+  spreadsheetUploadLink SpreadsheetUploadInvoice?
+  scanUploadLink        InvoiceScanUploadInvoice?
+  changeLogs            InvoiceChangeLog[]
 
   @@unique([batchId, rowNumber])
   @@index([invoiceNumber])
@@ -425,21 +809,21 @@ model ImportRow {
 }
 
 model InvoiceChangeLog {
-  id              String              @id @default(uuid()) @db.Uuid
-  invoiceId       String?             @map("invoice_id") @db.Uuid
-  invoiceNumber   String              @map("invoice_number")
-  source          String
-  action          InvoiceChangeAction
-  importRowId     String?             @map("import_row_id") @db.Uuid
-  actorUserId     String?             @map("actor_user_id") @db.Uuid
-  actorApiKeyId   String?             @map("actor_api_key_id") @db.Uuid
-  before          Json?
-  after           Json?
-  createdAt       DateTime            @default(now()) @map("created_at")
+  id            String              @id @default(uuid()) @db.Uuid
+  invoiceId     String?             @map("invoice_id") @db.Uuid
+  invoiceNumber String              @map("invoice_number")
+  source        String
+  action        InvoiceChangeAction
+  importRowId   String?             @map("import_row_id") @db.Uuid
+  actorUserId   String?             @map("actor_user_id") @db.Uuid
+  actorApiKeyId String?             @map("actor_api_key_id") @db.Uuid
+  before        Json?
+  after         Json?
+  createdAt     DateTime            @default(now()) @map("created_at")
 
-  invoice     Invoice?  @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  invoice     Invoice?   @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
   importRow   ImportRow? @relation(fields: [importRowId], references: [id], onDelete: SetNull)
-  actorApiKey ApiKey?   @relation(fields: [actorApiKeyId], references: [id], onDelete: SetNull)
+  actorApiKey ApiKey?    @relation(fields: [actorApiKeyId], references: [id], onDelete: SetNull)
 
   @@index([invoiceNumber])
   @@index([invoiceId])

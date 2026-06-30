@@ -17,6 +17,8 @@ import {
   snapshotFromInvoice,
 } from "../invoices/invoice-snapshot.util";
 import { PrismaService } from "../prisma/prisma.service";
+import { requireTenantId } from "../tenancy/tenant-context";
+import { tenantInvoiceUnique } from "../tenancy/tenant-scope";
 
 export interface AnalyzeRowInput {
   rowNumber: number;
@@ -74,6 +76,7 @@ export class ImportAnalyzeService {
   ): Promise<AnalyzeBatchResult> {
     const batch = await this.prisma.importBatch.create({
       data: {
+        tenantId: requireTenantId(),
         source: context.source,
         status: ImportBatchStatus.analyzing,
         spreadsheetUploadId: context.spreadsheetUploadId ?? null,
@@ -125,7 +128,7 @@ export class ImportAnalyzeService {
       seenInFile.set(invoiceNumber, row.rowNumber);
 
       const existing = await this.prisma.invoice.findUnique({
-        where: { invoiceNumber },
+        where: tenantInvoiceUnique(invoiceNumber),
       });
       const incomingSnapshot = snapshotFromInput(row.mapped);
       const classification = this.upsert.classify(existing, row.mapped);

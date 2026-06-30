@@ -4,6 +4,8 @@ import { createReadStream, existsSync } from "fs";
 import { mkdir, writeFile } from "fs/promises";
 import { join } from "path";
 import { PrismaService } from "../../prisma/prisma.service";
+import { requireTenantId } from "../../tenancy/tenant-context";
+import { tenantFilter } from "../../tenancy/tenant-scope";
 
 export interface ScanUploadListItem {
   id: string;
@@ -21,6 +23,7 @@ export class InvoiceScanUploadService {
 
   async listUploads(): Promise<ScanUploadListItem[]> {
     const uploads = await this.prisma.invoiceScanUpload.findMany({
+      where: tenantFilter(),
       orderBy: { createdAt: "desc" },
     });
     return uploads.map((upload) => ({
@@ -38,12 +41,11 @@ export class InvoiceScanUploadService {
   }) {
     return this.prisma.invoiceScanUpload.create({
       data: {
+        tenantId: requireTenantId(),
         originalFilename: input.originalFilename,
         storedPath: "",
         mimeType: input.mimeType,
-        uploadedBy: input.uploadedByUserId
-          ? { connect: { id: input.uploadedByUserId } }
-          : undefined,
+        uploadedByUserId: input.uploadedByUserId,
       },
     });
   }

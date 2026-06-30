@@ -4,6 +4,8 @@ import { existsSync } from "fs";
 import { mkdir, rm, writeFile } from "fs/promises";
 import { join } from "path";
 import { PrismaService } from "../prisma/prisma.service";
+import { requireTenantId } from "../tenancy/tenant-context";
+import { tenantFilter, tenantSpreadsheetUploadUnique } from "../tenancy/tenant-scope";
 
 export type DeleteUploadMode = "file_and_data" | "file_only";
 
@@ -24,13 +26,14 @@ export class SpreadsheetUploadService {
 
   async findByFilename(filename: string) {
     return this.prisma.spreadsheetUpload.findUnique({
-      where: { originalFilename: filename },
+      where: tenantSpreadsheetUploadUnique(filename),
       include: { invoices: true },
     });
   }
 
   async listUploads(): Promise<UploadListItem[]> {
     const uploads = await this.prisma.spreadsheetUpload.findMany({
+      where: tenantFilter(),
       orderBy: { createdAt: "desc" },
       include: {
         mappingProfile: { select: { id: true, name: true } },
@@ -147,6 +150,7 @@ export class SpreadsheetUploadService {
   }) {
     return this.prisma.spreadsheetUpload.create({
       data: {
+        tenantId: requireTenantId(),
         originalFilename: data.originalFilename,
         storedPath: data.storedPath,
         mappingProfileId: data.mappingProfileId,

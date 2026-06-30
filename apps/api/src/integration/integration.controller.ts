@@ -11,6 +11,8 @@ import {
 } from "@nestjs/common";
 import type { Request } from "express";
 import { ImportResolution } from "@prisma/client";
+import { Public } from "../auth/public.decorator";
+import { SkipTenant } from "../tenancy/tenancy.decorator";
 import { ApiKeyGuard } from "./api-key.guard";
 import { BulkInvoicesDto } from "./dto/bulk-invoices.dto";
 import { PatchIntegrationInvoiceDto } from "./dto/patch-invoice.dto";
@@ -19,6 +21,8 @@ import { IntegrationService } from "./integration.service";
 type ApiKeyRequest = Request & { apiKeyId?: string };
 
 @Controller("integration")
+@Public()
+@SkipTenant()
 @UseGuards(ApiKeyGuard)
 export class IntegrationController {
   constructor(private readonly service: IntegrationService) {}

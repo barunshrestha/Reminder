@@ -21,6 +21,7 @@ export interface ReminderRunHooks {
 
 export interface RunScheduleOptions {
   scheduleId: string;
+  tenantId?: string;
   dryRun?: boolean;
   storageRoot?: string;
 }
@@ -37,6 +38,8 @@ export interface RunScheduleStats {
 }
 
 export class ReminderRunExecutor {
+  private activeTenantId: string | null = null;
+
   constructor(
     private readonly prisma: PrismaClient,
     private readonly emailSender: EmailSender,
@@ -51,6 +54,8 @@ export class ReminderRunExecutor {
     const schedule = await this.prisma.schedule.findUniqueOrThrow({
       where: { id: options.scheduleId },
     });
+    const tenantId = options.tenantId ?? schedule.tenantId;
+    this.activeTenantId = tenantId;
     const dryRun = options.dryRun ?? schedule.dryRun;
     const storageRoot = options.storageRoot ?? this.storageRoot;
 
@@ -91,8 +96,8 @@ export class ReminderRunExecutor {
         }
       }
 
-      const vendor = await this.prisma.vendorSettings.findFirstOrThrow({
-        where: { id: "default" },
+      const settings = await this.prisma.tenantSettings.findUniqueOrThrow({
+        where: { tenantId },
       });
 
       if (!dryRun) {
@@ -100,7 +105,7 @@ export class ReminderRunExecutor {
       }
 
       const templateRows = await this.prisma.reminderMilestoneTemplate.findMany({
-        where: { isCustom: true },
+        where: { tenantId, isCustom: true },
       });
       const templateMap = new Map<number, MilestoneTemplateContent>(
         templateRows.map((row) => [
@@ -110,7 +115,7 @@ export class ReminderRunExecutor {
       );
 
       const invoices = await this.prisma.invoice.findMany({
-        where: { sendReminder: true, isActive: true, status: "open" },
+        where: { tenantId, sendReminder: true, isActive: true, status: "open" },
       });
 
       const today = new Date();
@@ -120,7 +125,7 @@ export class ReminderRunExecutor {
         const daysBehind = computeDaysBehind(
           formatDate(invoice.dueDate),
           today,
-          vendor.timezone,
+          settings.timezone,
         );
 
         const input: EligibilityInput = {
@@ -148,7 +153,7 @@ export class ReminderRunExecutor {
 
         const { eligible, nextTier, failures } = evaluateEligibility(
           input,
-          vendor.overdueTiers,
+          settings.overdueTiers,
         );
 
         if (!eligible || nextTier === null) {
@@ -202,17 +207,17 @@ export class ReminderRunExecutor {
           daysBehind,
           notificationNumber: invoice.notificationNumber,
           comments: invoice.comments,
-          includeComments: vendor.includeCommentsInEmail,
-          vendorName: vendor.vendorName ?? undefined,
-          vendorPhysicalAddress: vendor.vendorPhysicalAddress,
+          includeComments: settings.includeCommentsInEmail,
+          vendorName: settings.vendorName ?? undefined,
+          vendorPhysicalAddress: settings.vendorPhysicalAddress,
           unsubscribeUrl: buildUnsubscribeUrl(invoice.invoiceNumber),
         };
 
         const templateOverride = templateMap.get(nextTier);
         const fromEmail =
-          vendor.fromEmail ?? process.env.EMAIL_DEFAULT_FROM ?? undefined;
+          settings.fromEmail ?? process.env.EMAIL_DEFAULT_FROM ?? undefined;
         const emailConfigured =
-          Boolean(fromEmail) && Boolean(vendor.vendorPhysicalAddress?.trim());
+          Boolean(fromEmail) && Boolean(settings.vendorPhysicalAddress?.trim());
 
         try {
           if (invoice.reminderDeliveryMode === "email") {
@@ -234,8 +239,8 @@ export class ReminderRunExecutor {
               run.id,
               {
                 fromEmail: fromEmail!,
-                fromName: vendor.fromName ?? vendor.vendorName ?? undefined,
-                replyTo: vendor.replyToEmail ?? undefined,
+                fromName: settings.fromName ?? settings.vendorName ?? undefined,
+                replyTo: settings.replyToEmail ?? undefined,
               },
               templateOverride,
             );
@@ -286,14 +291,17 @@ export class ReminderRunExecutor {
         }
       }
 
-      if (vendor.digestEmailEnabled && !dryRun) {
-        const users = await this.prisma.user.findMany({ select: { email: true } });
-        const recipients = users.map((u) => u.email);
+      if (settings.digestEmailEnabled && !dryRun) {
+        const memberships = await this.prisma.tenantMembership.findMany({
+          where: { tenantId },
+          include: { user: { select: { email: true } } },
+        });
+        const recipients = memberships.map((m) => m.user.email);
         const digestResult = await sendVendorDigest(this.emailSender, {
           runId: run.id,
           scheduleName: schedule.name,
           stats,
-          vendorName: vendor.vendorName,
+          vendorName: settings.vendorName,
           recipients,
         });
         await this.audit("reminder.digest.sent", {
@@ -424,8 +432,11 @@ export class ReminderRunExecutor {
   }
 
   private async audit(eventType: string, payload: object): Promise<void> {
+    if (!this.activeTenantId) {
+      throw new Error("Tenant context is required for audit events");
+    }
     await this.prisma.auditEvent.create({
-      data: { eventType, payload },
+      data: { eventType, payload, tenantId: this.activeTenantId },
     });
   }
 }

@@ -58,12 +58,13 @@ Vendors and service providers track client balances in spreadsheets, databases, 
 
 ## 4. Deployment model
 
-- **Subscription product:** Vendors subscribe to the platform; operations provision one **isolated deployment per vendor** (application + PostgreSQL + Redis + secrets).
-- **Single vendor per deployment:** One **vendor organization** (the subscriber) per instance; no other vendors share that database.
-- **Many clients per vendor:** A vendor may have **many clients** (their customers / accounts receivable parties). Each client can have one or more invoice records. Use **client** in docs and UI—not **tenant** (reserved to mean a subscribing vendor on a shared platform, which is out of scope in v1).
-- **Invoice uniqueness:** `invoice_number` is **globally unique within the deployment**. Two different clients must not share the same `invoice_number`. Optional `external_client_id` groups multiple invoices under the same client for upsert and reporting.
-- **Scaling:** Add vendor capacity by provisioning additional deployments (vertical scale per instance as needed).
-- **Out of scope for v1:** Multi-tenant SaaS (many **vendors** in one shared application database).
+- **Multi-tenant SaaS:** Many vendor organizations share one platform deployment with strict row-level isolation per `tenantId`.
+- **Account + tenant hierarchy:** A billing **Account** may own one or more **Tenants** (organizations/workspaces). Users join via `AccountMembership` and `TenantMembership`.
+- **Many clients per tenant:** Each tenant manages many client invoice records. **`invoice_number` is unique per tenant** (`@@unique([tenantId, invoiceNumber])`).
+- **Subscription billing:** Stripe-backed plans with usage counters (invoices, schedules, connectors) enforced per tenant/account.
+- **Regional readiness:** Tenants store a `region` enum for future data residency routing; storage keys are region-prefixed.
+- **Auth:** Email/password, OIDC SSO, magic links, optional MFA, team invites. API keys are tenant-scoped for integration endpoints.
+- **Scaling:** Horizontal scale of stateless API/web/worker tiers; PostgreSQL with tenant-scoped indexes.
 
 ---
 

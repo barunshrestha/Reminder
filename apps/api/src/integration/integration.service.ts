@@ -16,6 +16,7 @@ import {
 } from "../invoices/invoice-upsert.service";
 import { snapshotFromInvoice } from "../invoices/invoice-snapshot.util";
 import { PrismaService } from "../prisma/prisma.service";
+import { tenantInvoiceUnique } from "../tenancy/tenant-scope";
 import type { BulkInvoicesDto } from "./dto/bulk-invoices.dto";
 import type { PatchIntegrationInvoiceDto } from "./dto/patch-invoice.dto";
 import { IdempotencyService } from "./idempotency.service";
@@ -193,7 +194,7 @@ export class IntegrationService {
     }
 
     const existing = await this.prisma.invoice.findUnique({
-      where: { invoiceNumber },
+      where: tenantInvoiceUnique(invoiceNumber),
     });
     if (!existing) {
       throw new NotFoundException(`Invoice ${invoiceNumber} not found`);

@@ -13,6 +13,8 @@ import {
   ReminderDeliveryMode as PrismaDeliveryMode,
 } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { requireTenantId } from "../tenancy/tenant-context";
+import { tenantFilter } from "../tenancy/tenant-scope";
 import type { ChangeLogContext } from "./invoice-change-log.service";
 import { InvoiceChangeLogService } from "./invoice-change-log.service";
 import {
@@ -195,8 +197,14 @@ export class InvoiceUpsertService {
       source: "legacy.upsert",
     };
 
+    const tenantId = requireTenantId();
     const existing = await this.prisma.invoice.findUnique({
-      where: { invoiceNumber: input.invoiceNumber },
+      where: {
+        tenantId_invoiceNumber: {
+          tenantId,
+          invoiceNumber: input.invoiceNumber,
+        },
+      },
     });
 
     const classification = this.classify(existing, input);
@@ -271,11 +279,12 @@ export class InvoiceUpsertService {
     missedSyncIncrements: number;
   }> {
     const seen = new Set(seenInvoiceNumbers);
-    const vendor = await this.prisma.vendorSettings.findFirstOrThrow({
-      where: { id: "default" },
+    const tenantId = requireTenantId();
+    const settings = await this.prisma.tenantSettings.findUniqueOrThrow({
+      where: { tenantId },
     });
     const active = await this.prisma.invoice.findMany({
-      where: { isActive: true },
+      where: { ...tenantFilter(), isActive: true },
       select: { id: true, invoiceNumber: true, missedSyncCount: true },
     });
 
@@ -287,7 +296,7 @@ export class InvoiceUpsertService {
         continue;
       }
       const nextCount = invoice.missedSyncCount + 1;
-      if (nextCount >= vendor.missedSyncsBeforeInactive) {
+      if (nextCount >= settings.missedSyncsBeforeInactive) {
         await this.prisma.invoice.update({
           where: { id: invoice.id },
           data: { isActive: false, missedSyncCount: nextCount },
@@ -312,6 +321,7 @@ export class InvoiceUpsertService {
     const paidOrZero = status !== "open" || balance.lte(0);
 
     return {
+      tenantId: requireTenantId(),
       clientName: input.clientName,
       invoiceNumber: input.invoiceNumber,
       totalAmount: new Prisma.Decimal(input.totalAmount),

@@ -14,6 +14,8 @@ import {
   type UpsertInvoiceInput,
 } from "../invoices/invoice-upsert.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { requireTenantId } from "../tenancy/tenant-context";
+import { tenantFilter } from "../tenancy/tenant-scope";
 import { assertReadOnlySql } from "./connector-sql";
 import type { CreateConnectorDto } from "./dto/create-connector.dto";
 import type { UpdateConnectorDto } from "./dto/update-connector.dto";
@@ -28,11 +30,16 @@ export class ConnectorsService {
   ) {}
 
   findAll() {
-    return this.prisma.connector.findMany({ orderBy: { createdAt: "desc" } });
+    return this.prisma.connector.findMany({
+      where: tenantFilter(),
+      orderBy: { createdAt: "desc" },
+    });
   }
 
   async findOne(id: string) {
-    const row = await this.prisma.connector.findUnique({ where: { id } });
+    const row = await this.prisma.connector.findFirst({
+      where: { id, ...tenantFilter() },
+    });
     if (!row) {
       throw new NotFoundException("Connector not found");
     }
@@ -43,6 +50,7 @@ export class ConnectorsService {
     assertReadOnlySql(dto.sql_query);
     return this.prisma.connector.create({
       data: {
+        tenantId: requireTenantId(),
         name: dto.name,
         enabled: dto.enabled ?? true,
         sqlQuery: dto.sql_query,
@@ -155,7 +163,7 @@ export class ConnectorsService {
   /** Run all enabled connectors (used before schedule evaluate). */
   async syncAllEnabled(): Promise<void> {
     const connectors = await this.prisma.connector.findMany({
-      where: { enabled: true },
+      where: { ...tenantFilter(), enabled: true },
     });
     for (const connector of connectors) {
       await this.sync(connector.id);

@@ -2,6 +2,10 @@ import { BadRequestException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 import { InvoiceEmailService } from "./invoice-email.service";
 
+vi.mock("../tenancy/tenant-context", () => ({
+  requireTenantId: () => "tenant-test-id",
+}));
+
 describe("InvoiceEmailService", () => {
   const baseInvoice = {
     id: "inv-1",
@@ -50,8 +54,8 @@ describe("InvoiceEmailService", () => {
           .mockResolvedValue({ ...baseInvoice, notificationNumber: 1 }),
         update: vi.fn(),
       },
-      vendorSettings: {
-        findFirstOrThrow: vi.fn().mockResolvedValue(vendor),
+      tenantSettings: {
+        findUniqueOrThrow: vi.fn().mockResolvedValue(vendor),
       },
       reminderMilestoneTemplate: {
         findUnique: vi.fn().mockResolvedValue(null),
@@ -115,8 +119,8 @@ describe("InvoiceEmailService", () => {
       invoice: {
         findUnique: vi.fn().mockResolvedValue(baseInvoice),
       },
-      vendorSettings: {
-        findFirstOrThrow: vi.fn().mockResolvedValue({
+      tenantSettings: {
+        findUniqueOrThrow: vi.fn().mockResolvedValue({
           ...vendor,
           fromEmail: null,
         }),

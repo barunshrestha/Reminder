@@ -9,6 +9,7 @@ import {
 } from "@payment-reminder/reminders";
 import { AuditService } from "../audit/audit.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { requireTenantId } from "../tenancy/tenant-context";
 import type { TestVendorEmailDto } from "./dto/test-vendor-email.dto";
 import type { UpdateVendorSettingsDto } from "./dto/update-vendor-settings.dto";
 
@@ -25,14 +26,14 @@ export class VendorSettingsService {
   }
 
   get() {
-    return this.prisma.vendorSettings.findFirstOrThrow({
-      where: { id: "default" },
+    return this.prisma.tenantSettings.findUniqueOrThrow({
+      where: { tenantId: requireTenantId() },
     });
   }
 
   update(dto: UpdateVendorSettingsDto) {
-    return this.prisma.vendorSettings.update({
-      where: { id: "default" },
+    return this.prisma.tenantSettings.update({
+      where: { tenantId: requireTenantId() },
       data: {
         timezone: dto.timezone,
         overdueTiers: dto.overdue_tiers,
@@ -76,8 +77,8 @@ export class VendorSettingsService {
       throw new BadRequestException("Email provider did not accept the test message");
     }
 
-    await this.prisma.vendorSettings.update({
-      where: { id: "default" },
+    await this.prisma.tenantSettings.update({
+      where: { tenantId: requireTenantId() },
       data: { emailVerifiedAt: new Date() },
     });
 

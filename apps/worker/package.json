@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@payment-reminder/domain": "*",
+    "@payment-reminder/push-notifications": "*",
     "@payment-reminder/reminders": "*",
     "@prisma/client": "^6.9.0",
     "bullmq": "^5.53.2",

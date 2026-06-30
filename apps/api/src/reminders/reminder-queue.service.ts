@@ -6,6 +6,7 @@ export const REMINDER_QUEUE_NAME = "reminder-runs";
 
 export interface EnqueueRunPayload {
   scheduleId: string;
+  tenantId: string;
   dryRun?: boolean;
 }
 

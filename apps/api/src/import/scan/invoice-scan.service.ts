@@ -4,9 +4,11 @@ import {
 } from "@nestjs/common";
 import { ImportResolution, ImportSource, Prisma } from "@prisma/client";
 import { AuditService } from "../../audit/audit.service";
+import { NotificationDispatcherService } from "../../notifications/notification-dispatcher.service";
 import { ImportAnalyzeService } from "../../import/import-analyze.service";
 import { ImportCommitService } from "../../import/import-commit.service";
 import { PrismaService } from "../../prisma/prisma.service";
+import { requireTenantId } from "../../tenancy/tenant-context";
 import { InvoiceExtractionService } from "./invoice-extraction.service";
 import {
   normalizeIsoDate,
@@ -38,6 +40,7 @@ export class InvoiceScanService {
     private readonly commit: ImportCommitService,
     private readonly audit: AuditService,
     private readonly prisma: PrismaService,
+    private readonly notifications: NotificationDispatcherService,
   ) {}
 
   async extractOne(
@@ -318,6 +321,19 @@ export class InvoiceScanService {
       }
     }
 
+    const failed = results.filter(
+      (result): result is { scanId: string; ok: false; error: string } =>
+        "ok" in result && result.ok === false,
+    );
+    if (failed.length > 0) {
+      void this.notifications.dispatchAlert("import_failure", {
+        title: "Invoice scan import failed",
+        body: `${failed.length} scanned invoice(s) could not be imported`,
+        url: "/import/scan",
+        tag: "import-failure",
+      });
+    }
+
     return { results };
   }
 
@@ -362,8 +378,8 @@ export class InvoiceScanService {
   }
 
   private async getPaymentTermsDays(): Promise<number> {
-    const settings = await this.prisma.vendorSettings.findFirst({
-      where: { id: "default" },
+    const settings = await this.prisma.tenantSettings.findUnique({
+      where: { tenantId: requireTenantId() },
       select: { defaultPaymentTermsDays: true },
     });
     return settings?.defaultPaymentTermsDays ?? 30;

@@ -2,6 +2,10 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { ImportResolution, ImportRowStatus, ImportSource } from "@prisma/client";
 import { ImportCommitService } from "./import-commit.service";
 
+vi.mock("../tenancy/tenant-context", () => ({
+  requireTenantId: () => "tenant-test-id",
+}));
+
 describe("ImportCommitService", () => {
   const prisma = {
     importBatch: {

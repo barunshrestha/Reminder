@@ -17,6 +17,7 @@ import {
 } from "../invoices/invoice-upsert.service";
 import { snapshotFromInput } from "../invoices/invoice-snapshot.util";
 import { PrismaService } from "../prisma/prisma.service";
+import { tenantInvoiceUnique } from "../tenancy/tenant-scope";
 
 export interface CommitDecision {
   importRowId: string;
@@ -109,7 +110,7 @@ export class ImportCommitService {
 
         if (resolution === ImportResolution.update) {
           const existing = await this.prisma.invoice.findUnique({
-            where: { invoiceNumber: row.invoiceNumber },
+            where: tenantInvoiceUnique(row.invoiceNumber),
           });
           if (!existing) {
             const { invoiceId } = await this.upsert.insertNew(
@@ -139,7 +140,7 @@ export class ImportCommitService {
 
         if (resolution === ImportResolution.delete_existing) {
           const existing = await this.prisma.invoice.findUnique({
-            where: { invoiceNumber: row.invoiceNumber },
+            where: tenantInvoiceUnique(row.invoiceNumber),
           });
           if (existing) {
             const deleted = await this.upsert.deleteInvoiceSafe(
